@@ -1,0 +1,25 @@
+name = "newsdigest"
+main = "worker/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "4ade94c28880b53876bf8cd0c604e426"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "newsdigest"
+database_id = "1ab23de3-3ed3-4685-8a9b-b427ea94a502"
+
+[[kv_namespaces]]
+binding = "SCRAPER_CONFIG"
+id = "bd78d3ac29eb432682cb60de67df3f9f"
+
+[[kv_namespaces]]
+binding = "PUSH_SUBSCRIPTIONS"
+id = "167e614538534561a3db962c1f625b74"
+
+[triggers]
+crons = ["0 */3 * * *"]  # Mỗi 3 giờ
+
+[vars]
+VAPID_PUBLIC_KEY = ""
+VAPID_PRIVATE_KEY = ""
