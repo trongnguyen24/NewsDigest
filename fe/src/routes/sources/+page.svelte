@@ -8,10 +8,10 @@
   import { Plus, Trash2, RefreshCw } from 'lucide-svelte';
   import { api } from '$lib/api';
 
-  let isLoading = true;
-  let newUrl = '';
-  let newName = '';
-  let isAdding = false;
+  let isLoading = $state(true);
+  let newUrl = $state('');
+  let newName = $state('');
+  let isAdding = $state(false);
 
   onMount(async () => {
     try {
@@ -85,7 +85,7 @@
   <div class="flex gap-2">
      <Input bind:value={newUrl} placeholder="URL Nguồn..." class="w-64" />
      <Input bind:value={newName} placeholder="Tên (tuỳ chọn)" class="w-40" />
-     <Button disabled={isAdding || !newUrl.trim()} on:click={addSource}>
+     <Button disabled={isAdding || !newUrl.trim()} onclick={addSource}>
        <Plus size={16} class="mr-2"/>{isAdding ? 'Đang thêm...' : 'Thêm mới'}
      </Button>
   </div>
@@ -93,8 +93,8 @@
 
 {#if isLoading}
   <div class="animate-pulse flex flex-col gap-4">
-    <div class="h-20 bg-muted rounded-xl bg-secondary/50"></div>
-    <div class="h-20 bg-muted rounded-xl bg-secondary/50"></div>
+    <div class="h-20 bg-muted rounded-xl"></div>
+    <div class="h-20 bg-muted rounded-xl"></div>
   </div>
 {:else if $sources.length === 0}
   <div class="py-20 text-center border rounded-lg border-dashed text-muted-foreground">
@@ -113,13 +113,13 @@
             <div class="text-xs text-muted-foreground mt-1">Loại: {source.type} • Nhóm: {source.group_name}</div>
           </div>
           <div class="flex items-center gap-3">
-            <button class="text-muted-foreground hover:text-foreground transition-colors" title="Fetch thủ công" on:click={() => manualFetch(source.id)}>
+            <button class="text-muted-foreground hover:text-foreground transition-colors" title="Fetch thủ công" onclick={() => manualFetch(source.id)}>
               <RefreshCw size={16} />
             </button>
-            <button class="text-muted-foreground hover:text-destructive transition-colors" title="Xoá nguồn" on:click={() => deleteSource(source.id)}>
+            <button class="text-muted-foreground hover:text-destructive transition-colors" title="Xoá nguồn" onclick={() => deleteSource(source.id)}>
               <Trash2 size={16} />
             </button>
-            <Switch checked={source.enabled === 1} on:click={() => toggleSource(source.id, source.enabled)} />
+            <Switch checked={source.enabled === 1} onCheckedChange={() => toggleSource(source.id, source.enabled)} />
           </div>
         </CardContent>
       </Card>

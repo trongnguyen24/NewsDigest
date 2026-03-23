@@ -1,6 +1,5 @@
 <script lang="ts">
   import { prefs } from '$lib/stores/prefs';
-  import { Switch } from '$lib/components/ui/switch';
   import { Button } from '$lib/components/ui/button';
   import { Moon, Sun, Settings } from 'lucide-svelte';
 
@@ -9,7 +8,7 @@
   }
 </script>
 
-<header class="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+<header class="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
   <div class="container mx-auto px-4 flex h-14 items-center justify-between">
     <div class="flex items-center gap-6">
       <a href="/" class="flex items-center gap-2">
@@ -24,7 +23,7 @@
     </div>
     
     <div class="flex items-center gap-2">
-      <Button variant="ghost" size="icon" on:click={toggleDark}>
+      <Button variant="ghost" size="icon" onclick={toggleDark}>
         {#if $prefs.darkMode}
           <Moon class="h-5 w-5" />
         {:else}

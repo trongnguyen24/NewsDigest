@@ -7,16 +7,15 @@
   import { sources } from '$lib/stores/sources';
   import { api } from '$lib/api';
 
-  export let article: Article;
+  let { article }: { article: Article } = $props();
 
-  let tagsArray: string[] = [];
-  $: {
+  let tagsArray = $derived.by(() => {
     try {
-      tagsArray = article.tags ? JSON.parse(article.tags) : [];
-    } catch(e) { tagsArray = []; }
-  }
+      return article.tags ? JSON.parse(article.tags) : [];
+    } catch(e) { return []; }
+  });
 
-  $: sourceName = $sources.find(s => s.id === article.source_id)?.name || 'Unknown';
+  let sourceName = $derived($sources.find(s => s.id === article.source_id)?.name || 'Unknown');
 
   async function toggleBookmark() {
     const newState = article.is_bookmarked ? 0 : 1;
@@ -27,7 +26,6 @@
         body: JSON.stringify({ bookmarked: newState === 1 })
       });
       article.is_bookmarked = newState;
-      article = article; // trigger reactivity
     } catch(e) { console.error('Bookmark failed', e); }
   }
 
@@ -36,7 +34,6 @@
     try {
       await fetch(api(`/api/articles/${article.id}/read`), { method: 'PATCH' });
       article.is_read = 1;
-      article = article;
     } catch(e) {}
   }
 </script>
@@ -45,7 +42,7 @@
   <CardHeader class="pb-2">
     <div class="flex justify-between items-start gap-4">
       <CardTitle class="text-lg leading-tight line-clamp-2">
-        <a href={article.url} target="_blank" rel="noopener noreferrer" class="hover:underline" on:click={markRead}>
+        <a href={article.url} target="_blank" rel="noopener noreferrer" class="hover:underline" onclick={markRead}>
           {article.title}
         </a>
       </CardTitle>
@@ -59,7 +56,7 @@
       <span>{new Date(article.published_at || article.fetched_at).toLocaleTimeString('vi-VN', {hour: '2-digit', minute:'2-digit', day:'numeric', month:'short'})}</span>
     </div>
   </CardHeader>
-  <CardContent class="flex-grow">
+  <CardContent class="grow">
     <p class="text-sm text-muted-foreground line-clamp-3">
       {article.summary || article.full_text || "Đang xử lý nội dung..."}
     </p>
@@ -72,7 +69,7 @@
     {/if}
   </CardContent>
   <CardFooter class="pt-4 border-t flex justify-between items-center text-sm text-muted-foreground">
-    <button class="flex items-center gap-1 hover:text-foreground transition-colors group" on:click={toggleBookmark}>
+    <button class="flex items-center gap-1 hover:text-foreground transition-colors group" onclick={toggleBookmark}>
       {#if article.is_bookmarked}
         <BookmarkCheck size={16} class="fill-current text-primary" />
         <span class="text-primary">Đã lưu</span>
@@ -81,7 +78,7 @@
         Lưu
       {/if}
     </button>
-    <a href={article.url} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 hover:text-foreground transition-colors" on:click={markRead}>
+    <a href={article.url} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 hover:text-foreground transition-colors" onclick={markRead}>
       Chi tiết
       <ExternalLink size={14} />
     </a>

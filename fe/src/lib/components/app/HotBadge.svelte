@@ -2,10 +2,10 @@
   import { Badge } from '$lib/components/ui/badge';
   import { Flame } from 'lucide-svelte';
   
-  export let score: number | null;
+  let { score }: { score: number | null } = $props();
   
-  $: variant = score && score >= 8 ? 'destructive' : score && score >= 5 ? 'default' : 'secondary';
-  $: label = score && score >= 8 ? `Hot ${score}` : score ? `${score}/10` : 'N/A';
+  let variant = $derived(score && score >= 8 ? 'destructive' : score && score >= 5 ? 'default' : 'secondary');
+  let label = $derived(score && score >= 8 ? `Hot ${score}` : score ? `${score}/10` : 'N/A');
 </script>
 
 {#if score}

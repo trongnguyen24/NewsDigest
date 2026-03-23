@@ -11,9 +11,9 @@
     { name: 'Cloudflare Blog', url: 'https://blog.cloudflare.com/rss/', group: 'Tech' }
   ];
 
-  let selected = [SUGGESTED_SOURCES[0]];
-  let customUrl = "";
-  let isFetching = false;
+  let selected = $state([SUGGESTED_SOURCES[0]]);
+  let customUrl = $state("");
+  let isFetching = $state(false);
 
   function toggle(source: any) {
     if (selected.includes(source)) selected = selected.filter(s => s !== source);
@@ -71,7 +71,7 @@
     <CardContent class="grid gap-3">
       {#each SUGGESTED_SOURCES as src}
         <button 
-          on:click={() => toggle(src)}
+          onclick={() => toggle(src)}
           class="flex items-center justify-between p-4 border rounded-xl hover:bg-secondary/30 transition-colors text-left {selected.includes(src) ? 'ring-2 ring-primary border-primary' : ''}">
           <div>
             <div class="font-semibold">{src.name}</div>
@@ -87,7 +87,7 @@
     </CardContent>
   </Card>
 
-  <Button class="w-full text-lg h-12" disabled={isFetching} on:click={startOnboarding}>
+  <Button class="w-full text-lg h-12" disabled={isFetching} onclick={startOnboarding}>
     {isFetching ? 'Đang đọc hiểu dữ liệu lần đầu...' : 'Bắt đầu cập nhật lưới tin'}
   </Button>
 </div>

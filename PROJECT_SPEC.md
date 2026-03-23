@@ -9,6 +9,15 @@
 
 **NewsDigest** là một Progressive Web App cá nhân, tự động thu thập tin tức từ nhiều nguồn (RSS, blog, Reddit, VOZ, YouTube), dùng AI tóm tắt và chấm điểm độ hot, sau đó báo cáo digest mỗi giờ cho người dùng.
 
+### Chiến lược: Cloudflare + Dify hybrid
+
+Dự án kết hợp **Cloudflare Workers** (fetch/API/push) với **Dify Agent** (AI summarize/scoring) để **tối ưu chi phí**:
+
+- **Cloudflare Workers** (Free tier): xử lý mọi logic không cần AI — fetch bài, API cho frontend, cron, push notification.
+- **Dify Agent** (Free tier + OpenRouter): xử lý phần AI — tóm tắt, chấm điểm, viết digest. Chạy qua tool-calling, gọi API của Worker.
+
+> Cách này loại bỏ nhu cầu Vertex AI, CF Queues, và CF R2 trong giai đoạn MVP, giảm chi phí về gần ~$0.
+
 ### Tech stack
 
 | Layer | Công nghệ |
@@ -17,32 +26,32 @@
 | UI components | shadcn-svelte + Tailwind CSS v4 |
 | Icons | lucide-svelte |
 | Hosting frontend | Cloudflare Pages |
-| Backend / API | Cloudflare Workers (TypeScript) |
+| Backend / API | Cloudflare Workers (Hono + TypeScript) |
 | Scheduler | Cloudflare Workers Cron Trigger |
-| Queue | Cloudflare Queues |
 | Database | Cloudflare D1 (SQLite at edge) |
-| Cache / KV | Cloudflare KV |
-| File storage | Cloudflare R2 |
-| AI tóm tắt | Vertex AI — Gemini 1.5 Flash |
+| KV Store | Cloudflare KV |
+| AI tóm tắt + scoring | Dify Agent (via OpenRouter → Gemini/Llama) |
 | Push notification | Web Push API (VAPID) qua CF Worker |
 
 ### Kiến trúc tổng thể
 
 ```
-[Nguồn tin]          [Cloudflare Edge]                  [Frontend]
-  RSS/Atom  ──────▶  Cron Worker (1h)                     SvelteKit PWA
-  HTML Blog ──────▶    │ fetch + parse                     │
-  Reddit    ──────▶    │ dedup                             │  CF Pages
-  YouTube   ──────▶    ▼                                   │
-  VOZ       ──────▶  CF Queues ──▶ AI Worker               │
-  Custom    ──────▶                  │ Gemini Flash         │
-                     CF D1           │ summarize            │
-                     CF KV  ◀────────┘ score               │
-                     CF R2  (cache)                        │
-                       │                                   │
-                     API Worker ◀──────────────────────────┘
-                       │ auth / rate limit
-                     Web Push ──▶ Browser notification
+[Nguồn tin]           [Cloudflare Edge]                    [Dify Agent]
+  RSS/Atom  ──────▶  Cron Worker (3h, round-robin)
+  HTML Blog ──────▶    │ fetch + parse via scraper
+  Reddit    ──────▶    │ dedup (INSERT OR IGNORE)
+  YouTube   ──────▶    ▼
+  VOZ       ──────▶  CF D1 (articles, sources, digests)
+                       ▲                                   Dify (OpenRouter)
+                       │                                     │ get_sources
+[Frontend]             │                                     │ fetch_source_articles
+  SvelteKit PWA ────▶ API Worker (Hono)                     │ get_unsummarized
+  CF Pages             │ CORS                                │ [AI summarize]
+                       │ articles/sources/digest/push        │ save_summaries
+                       ▼                                     │ save_digest
+                     Web Push (VAPID, RFC 8291)              ▼
+                       │                                   Gọi API Worker
+                     Browser notification                  để lưu kết quả
 ```
 
 ---
@@ -133,12 +142,12 @@ src/lib/components/
 
 **Hot score badge — dùng variant theo điểm:**
 ```svelte
-<!-- HotBadge.svelte -->
+<!-- HotBadge.svelte (Svelte 5 runes) -->
 <script lang="ts">
   import { Badge } from '$lib/components/ui/badge';
-  export let score: number;
-  $: variant = score >= 8 ? 'destructive' : score >= 5 ? 'default' : 'secondary';
-  $: label = score >= 8 ? `Hot ${score}` : score >= 5 ? `${score}/10` : `${score}/10`;
+  let { score }: { score: number } = $props();
+  const variant = $derived(score >= 8 ? 'destructive' : score >= 5 ? 'default' : 'secondary');
+  const label = $derived(score >= 8 ? `🔥 ${score}` : `${score}/10`);
 </script>
 <Badge {variant}>{label}</Badge>
 ```
@@ -147,37 +156,52 @@ src/lib/components/
 
 ```
 newsdigest/
-├── src/
-│   ├── lib/
-│   │   ├── components/
-│   │   │   ├── ui/           # shadcn-svelte (generated, không edit)
-│   │   │   └── app/          # Custom components
-│   │   ├── stores/           # Svelte stores
-│   │   └── utils/            # Helper functions
-│   └── routes/
-│       ├── +layout.svelte    # App shell, nav, dark mode
-│       ├── +page.svelte      # Feed chính
-│       ├── digest/
-│       │   └── +page.svelte  # Digest view
-│       ├── sources/
-│       │   └── +page.svelte  # Quản lý nguồn
-│       └── bookmarks/
-│           └── +page.svelte  # Bài đã lưu
-├── workers/
-│   ├── cron/                 # Cron Worker: fetch + parse
-│   ├── ai/                   # AI Worker: Gemini summarize
-│   ├── api/                  # API Worker: endpoints cho frontend
-│   └── push/                 # Push Worker: gửi notification
-├── components.json           # shadcn-svelte config
+├── fe/                      # Frontend (SvelteKit)
+│   ├── src/
+│   │   ├── lib/
+│   │   │   ├── components/
+│   │   │   │   ├── ui/           # shadcn-svelte (generated, không edit)
+│   │   │   │   └── app/          # Custom components
+│   │   │   ├── stores/           # Svelte stores
+│   │   │   ├── api.ts            # API client helper
+│   │   │   ├── types.ts          # Shared TypeScript types
+│   │   │   └── utils.ts          # Helper functions
+│   │   └── routes/
+│   │       ├── +layout.svelte    # App shell, nav, dark mode
+│   │       ├── +page.svelte      # Feed chính
+│   │       ├── digest/
+│   │       │   └── +page.svelte  # Digest view
+│   │       ├── sources/
+│   │       │   └── +page.svelte  # Quản lý nguồn
+│   │       ├── bookmarks/
+│   │       │   └── +page.svelte  # Bài đã lưu
+│   │       └── onboarding/
+│   │           └── +page.svelte  # Onboarding flow
+│   └── components.json           # shadcn-svelte config
+├── worker/                  # Backend (Cloudflare Workers)
+│   ├── index.ts             # Entry: fetch → API, scheduled → Cron
+│   ├── types.ts             # Env, Article, Source, ArticleInput
+│   ├── api/
+│   │   └── index.ts         # Hono router — tất cả API endpoints
+│   ├── cron/
+│   │   ├── index.ts         # Cron scheduler — round-robin fetch
+│   │   └── scraper.ts       # RSS, Reddit, YouTube, VOZ adapters
+│   └── push/
+│       └── index.ts         # Web Push (RFC 8291 + VAPID)
+├── docs/
+│   └── dify-setup.md        # Hướng dẫn setup Dify Agent
+├── schema.sql               # D1 database schema
 ├── wrangler.toml
 └── PROJECT_SPEC.md
 ```
 
-#### 1.4 wrangler.toml cơ bản
+#### 1.4 wrangler.toml
 
 ```toml
 name = "newsdigest"
+main = "worker/index.ts"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
@@ -192,27 +216,15 @@ id = "<auto-generated>"
 binding = "PUSH_SUBSCRIPTIONS"
 id = "<auto-generated>"
 
-[[r2_buckets]]
-binding = "DIGEST_CACHE"
-bucket_name = "newsdigest-cache"
-
-[[queues.producers]]
-binding = "AI_QUEUE"
-queue = "newsdigest-ai"
-
-[[queues.consumers]]
-queue = "newsdigest-ai"
-max_batch_size = 10
-max_batch_timeout = 30
-
 [triggers]
-crons = ["0 * * * *"]  # Mỗi giờ đúng
+crons = ["0 */3 * * *"]  # Mỗi 3 giờ
 
 [vars]
-VERTEX_API_KEY = ""    # Set qua wrangler secret
-VAPID_PUBLIC_KEY = ""
+VAPID_PUBLIC_KEY = ""    # Set qua wrangler secret
 VAPID_PRIVATE_KEY = ""
 ```
+
+> **Không cần** CF Queues, R2, hay Vertex AI key trong MVP. Dify agent xử lý phần AI.
 
 ---
 
@@ -247,9 +259,9 @@ CREATE TABLE articles (
   source_id   TEXT NOT NULL REFERENCES sources(id),
   url         TEXT NOT NULL,
   title       TEXT NOT NULL,
-  summary     TEXT,                     -- tóm tắt AI (nullable, điền sau)
+  summary     TEXT,                     -- tóm tắt AI (nullable, Dify điền sau)
   full_text   TEXT,                     -- nội dung gốc (optional)
-  hot_score   INTEGER,                  -- 1–10, do AI chấm
+  hot_score   INTEGER,                  -- 1–10, do Dify Agent chấm
   tags        TEXT,                     -- JSON array: ["AI", "Security"]
   published_at TEXT,
   fetched_at  TEXT NOT NULL DEFAULT (datetime('now')),
@@ -258,13 +270,13 @@ CREATE TABLE articles (
   UNIQUE(source_id, url)               -- dedup theo source + url
 );
 
--- Digest report được tạo mỗi giờ
+-- Digest report
 CREATE TABLE digests (
   id          TEXT PRIMARY KEY,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  period_start TEXT NOT NULL,           -- giờ bắt đầu kỳ fetch
+  period_start TEXT NOT NULL,
   period_end   TEXT NOT NULL,
-  summary_text TEXT NOT NULL,           -- tổng hợp AI viết
+  summary_text TEXT NOT NULL,           -- tổng hợp do Dify Agent viết
   top_article_ids TEXT NOT NULL,        -- JSON array of article IDs
   total_fetched INTEGER NOT NULL DEFAULT 0
 );
@@ -280,40 +292,40 @@ CREATE INDEX idx_articles_published ON articles(published_at DESC);
 
 ### Bước 3 — Cron Worker: thu thập bài viết
 
-**File:** `workers/cron/index.ts`
+**File:** `worker/cron/index.ts`
 
-Cron Worker chạy mỗi giờ, thực hiện tuần tự:
+Cron Worker chạy **mỗi 3 giờ**, round-robin fetch **1 source mỗi lần** để tránh timeout.
 
 #### 3.1 Logic chính
 
 ```
 scheduled() {
   1. Lấy danh sách sources đang enabled từ D1
-  2. Với mỗi source: gọi fetchSource(source)
-  3. Với mỗi bài mới: insert vào D1 (IGNORE nếu trùng url)
-  4. Đẩy batch bài mới vào CF Queue để AI xử lý
-  5. Trigger tạo digest sau khi fetch xong
+  2. Đọc index tiếp theo từ KV (round-robin)
+  3. Gọi fetchSource(source) cho source tại index đó
+  4. INSERT OR IGNORE bài mới vào D1
+  5. Cập nhật last_fetched_at
+  6. Lưu index tiếp theo vào KV
 }
 ```
 
+> **Không đẩy vào Queue, không gọi AI.** Phần AI do Dify agent xử lý riêng.
+
 #### 3.2 fetchSource() — smart scraper
 
-Xử lý theo thứ tự ưu tiên:
+Xử lý theo `source.type`:
 
-**Ưu tiên 1 — Nguồn có type cố định** (reddit, youtube, voz): dùng adapter riêng.
+| Type | Adapter | Chi tiết |
+|---|---|---|
+| `rss` | `fetchRSS()` | Parse RSS/Atom bằng `fast-xml-parser`, lấy tối đa 20 bài |
+| `reddit` | `fetchReddit()` | Reddit JSON API: `/new.json?limit=25`, không cần auth |
+| `youtube` | `fetchYouTube()` | YouTube Data API v3: channels → playlistItems (1 unit/request) |
+| `voz` | `fetchVoz()` | HTMLRewriter parse `.structItem-title` + `.structItem` |
+| `html` | `fetchUnknown()` | Chưa implement — trả về `[]` |
 
-**Ưu tiên 2 — RSS/Atom**: kiểm tra `scraper_configs` trong D1 xem domain đã biết chưa. Nếu có `mode = 'rss'` → parse feed thẳng. Nếu chưa biết → chạy auto-detect.
+**Dedup**: dùng `INSERT OR IGNORE` với UNIQUE constraint `(source_id, url)`.
 
-**Auto-detect** (chỉ chạy lần đầu per domain):
-- Thử các path RSS phổ biến: `/rss`, `/feed`, `/atom.xml`, `/rss.xml`, `/index.xml`
-- Tìm `<link rel="alternate" type="application/rss+xml">` trong HTML
-- Nếu không có RSS → parse HTML bằng heuristic CSS selectors
-- Nếu heuristic fail → gọi Gemini extract structured data từ HTML
-- Lưu kết quả vào `scraper_configs` để tái dùng
-
-**Dedup**: dùng `INSERT OR IGNORE` vào bảng `articles` với UNIQUE constraint `(source_id, url)`.
-
-#### 3.3 Adapter cho nguồn đặc biệt
+#### 3.3 Adapter chi tiết
 
 **Reddit adapter**:
 - Dùng Reddit JSON API: `https://www.reddit.com/r/{subreddit}/new.json?limit=25`
@@ -321,98 +333,91 @@ Xử lý theo thứ tự ưu tiên:
 - Map fields: `title`, `url`, `permalink`, `score`, `created_utc`
 
 **YouTube adapter**:
-- Lần đầu: gọi `channels?part=contentDetails&forHandle={handle}` để lấy `uploadsPlaylistId`, lưu vào `scraper_configs`
-- Các lần sau: gọi `playlistItems?part=snippet,contentDetails&playlistId={uploadsPlaylistId}&maxResults=10`
-- Dùng `YOUTUBE_API_KEY` từ env var
-- **Lưu ý**: dùng `playlistItems.list` (1 unit/request) thay vì `search.list` (100 units/request) để tiết kiệm quota
+- Lần đầu: gọi `channels?part=contentDetails&forHandle={handle}` để lấy `uploadsPlaylistId`
+- Các lần sau: gọi `playlistItems?part=snippet,contentDetails&playlistId={id}&maxResults=10`
+- Dùng `YOUTUBE_API_KEY` từ env var (set qua `wrangler secret put`)
+- **Lưu ý**: dùng `playlistItems.list` (1 unit/request) thay vì `search.list` (100 units/request)
 
 **VOZ adapter**:
-- VOZ render phía server nên có thể fetch HTML thô
-- Parse `<article>` hoặc `.thread-item` bằng heuristic
-- Fallback sang Gemini nếu layout thay đổi
-- Thêm delay 2s giữa các request để tránh bị block
+- VOZ render SSR → fetch HTML thô
+- HTMLRewriter parse `.structItem-title a` (href + text) và `.structItem`
 
 ---
 
-### Bước 4 — AI Worker: tóm tắt và chấm điểm
+### Bước 4 — Dify Agent: tóm tắt và chấm điểm
 
-**File:** `workers/ai/index.ts`
+> **Thay thế cho AI Worker nội bộ.** Dify Agent xử lý toàn bộ AI logic, gọi Worker API để đọc/ghi dữ liệu.
 
-AI Worker nhận message từ CF Queue, gọi Gemini Flash để xử lý batch bài viết.
+Chi tiết setup Dify → xem [docs/dify-setup.md](docs/dify-setup.md).
 
-#### 4.1 Queue consumer
+#### 4.1 Quy trình của Dify Agent
 
 ```
-queue handler nhận batch tối đa 10 bài {
-  1. Gom text: title + full_text (hoặc URL snippet) của từng bài
-  2. Gọi Gemini với prompt bên dưới
-  3. Parse JSON response
-  4. UPDATE articles SET summary, hot_score, tags WHERE id = ?
+1. get_sources()              → GET  /api/sources
+2. fetch_source_articles(id)  → POST /api/sources/:id/fetch
+3. get_unsummarized_articles()→ GET  /api/articles?unsummarized=1&limit=30
+4. [AI tóm tắt + chấm điểm hot_score + gắn tags]
+5. save_summaries()           → POST /api/articles/summarize
+6. save_digest()              → POST /api/digest
+```
+
+#### 4.2 Tại sao dùng Dify thay vì AI Worker?
+
+| | AI Worker (CF Queues + Vertex AI) | Dify Agent (OpenRouter) |
+|---|---|---|
+| Chi phí | Vertex AI pricing + Queue usage | OpenRouter free tier / rẻ |
+| Complexity | Phải build queue consumer, retry logic | Dify xử lý hết, chỉ cần setup tools |
+| Flexibility | Hardcode prompt trong code | Thay đổi prompt/model qua UI |
+| Monitoring | Phải tự log | Dify dashboard có sẵn |
+
+#### 4.3 Endpoints cho Dify
+
+Worker cung cấp 2 endpoint đặc biệt cho Dify:
+
+**POST `/api/articles/summarize`** — nhận kết quả tóm tắt:
+```json
+{
+  "results": [
+    { "id": "uuid", "summary": "...", "hot_score": 8, "tags": ["AI", "Tech"] }
+  ]
 }
 ```
 
-#### 4.2 Prompt cho Gemini
-
+**POST `/api/digest`** — nhận digest tổng hợp:
+```json
+{
+  "summary_text": "Tổng hợp xu hướng...",
+  "top_article_ids": ["id1", "id2"]
+}
 ```
-Bạn là editor tin tức. Phân tích các bài viết dưới đây và trả về JSON array.
-
-Với mỗi bài:
-- "id": giữ nguyên id được cung cấp
-- "summary": tóm tắt 2–3 câu bằng tiếng Việt, súc tích, nêu điểm chính
-- "hot_score": integer 1–10 đánh giá độ quan trọng/hot
-  (10 = tin cực kỳ quan trọng/breaking, 1 = thông thường)
-- "tags": array tối đa 3 tag từ: ["AI", "Security", "Tech", "Business",
-  "Vietnam", "World", "Dev", "Science", "Crypto", "Policy"]
-
-Chỉ trả về JSON array, không giải thích, không markdown.
-
-Bài viết:
-[{ "id": "...", "title": "...", "text": "..." }, ...]
-```
-
-#### 4.3 Retry logic
-
-CF Queues tự động retry nếu worker throw error. Nên:
-- Catch lỗi Gemini API → throw để trigger retry
-- Catch lỗi parse JSON → log và ack (không retry vô tận)
-- Đặt `max_retries = 3` trong wrangler.toml
 
 ---
 
 ### Bước 5 — Digest generation
 
-Sau mỗi lần cron chạy xong, tạo một digest report.
+Digest được tạo bởi **Dify Agent** (không tự động trong Worker).
 
-#### 5.1 Logic tạo digest
-
-```
-createDigest(periodStart, periodEnd) {
-  1. Query top 10 bài có hot_score cao nhất trong kỳ từ D1
-  2. Gọi Gemini tổng hợp: "Đây là các tin hot nhất giờ qua, viết 1 đoạn tổng quan"
-  3. INSERT vào bảng digests
-  4. Lưu JSON digest vào R2 (key: digests/{YYYY-MM-DD}/{HH}.json) để cache
-  5. Trigger Web Push notification
-}
-```
-
-#### 5.2 Prompt tổng hợp digest
+#### 5.1 Logic
 
 ```
-Dưới đây là các tin tức hot nhất trong 1 giờ qua được thu thập tự động.
-Viết 2–3 câu tổng quan bằng tiếng Việt, nêu các chủ đề nổi bật.
-Giọng văn ngắn gọn, khách quan như một biên tập viên tin tức.
-
-Bài viết:
-[{ "title": "...", "summary": "...", "hot_score": 8 }, ...]
+Dify Agent:
+  1. Sau khi summarize xong tất cả bài
+  2. Chọn top bài hot_score cao nhất
+  3. Viết đoạn tổng quan 3-5 câu
+  4. Gọi POST /api/digest để lưu
 ```
+
+#### 5.2 Đọc digest
+
+Frontend gọi `GET /api/digest/latest` để lấy digest mới nhất + top articles.
 
 ---
 
 ### Bước 6 — API Worker: endpoints cho frontend
 
-**File:** `workers/api/index.ts`
+**File:** `worker/api/index.ts`
 
-Dùng Hono (nhẹ, phù hợp CF Workers) làm router.
+Dùng Hono làm router, có CORS middleware trên `/api/*`.
 
 ```bash
 npm install hono
@@ -421,95 +426,95 @@ npm install hono
 #### 6.1 Endpoints
 
 ```
+# Articles
 GET  /api/articles
      ?page=1&limit=20
      &tag=AI
      &source_id=xxx
      &min_hot=7
-     &sort=hot|date        # default: date
-     → { articles[], total, nextPage }
+     &sort=hot|date          # default: date (fetched_at DESC)
+     &bookmarked=1           # chỉ bài đã bookmark
+     &unsummarized=1         # chỉ bài chưa tóm tắt
+     → { articles[], total, page, nextPage }
 
 GET  /api/articles/:id
-     → Article object đầy đủ
-
-GET  /api/digest/latest
-     → Digest object + top articles
-
-GET  /api/digest/:date/:hour
-     → Digest cụ thể (từ R2 cache)
-
-GET  /api/sources
-     → Danh sách sources của user
-
-POST /api/sources
-     body: { url, name?, group? }
-     → { source } sau khi validate + detect type
-
-PATCH /api/sources/:id
-     body: { enabled?, name?, group? }
-     → source đã update
-
-DELETE /api/sources/:id
-     → { ok: true }
-
-POST /api/sources/:id/fetch
-     → Trigger fetch thủ công cho nguồn đó
+     → { article }
 
 PATCH /api/articles/:id/bookmark
      body: { bookmarked: true|false }
-     → article đã update
+     → { ok: true }
 
 PATCH /api/articles/:id/read
-     body: { read: true }
-     → article đã update
+     → { ok: true }
 
+# Dify Integration
+POST /api/articles/summarize
+     body: { results: [{ id, summary, hot_score, tags }] }
+     → { ok, updated }
+
+POST /api/digest
+     body: { summary_text, top_article_ids? }
+     → { ok, digestId }
+
+# Digest Read
+GET  /api/digest/latest
+     → { digest, topArticles }
+
+# Sources
+GET  /api/sources
+     → { sources[] }
+
+POST /api/sources
+     body: { url, name?, group_name? }
+     → { ok, source }  (auto-detect type: rss/reddit/youtube/voz)
+
+PATCH /api/sources/:id
+     body: { enabled?, name?, group_name? }
+     → { ok }
+
+DELETE /api/sources/:id
+     → { ok }
+
+POST /api/sources/:id/fetch
+     → { ok, fetched, inserted }  (trigger fetch thủ công)
+
+# Push Notification
 GET  /api/push/vapid-public-key
      → { publicKey }
 
 POST /api/push/subscribe
      body: PushSubscription object
-     → { ok: true }
+     → { ok }
 
 DELETE /api/push/unsubscribe
-     body: { endpoint }
-     → { ok: true }
+     → { ok }
 ```
 
 #### 6.2 Auth
 
-MVP dùng simple secret key: user lưu key trong localStorage, gửi qua header `Authorization: Bearer {key}`. Key được set trong `wrangler.toml` vars. Đủ dùng cho personal app.
+MVP dùng simple approach: chưa có auth middleware. Đủ dùng cho personal app (1 user). Có thể thêm Bearer token sau.
 
 ---
 
 ### Bước 7 — Web Push notification
 
-**File:** `workers/push/index.ts`
+**File:** `worker/push/index.ts`
 
 #### 7.1 Setup VAPID keys
 
 ```bash
 npx web-push generate-vapid-keys
-# Lưu vào wrangler secret
 wrangler secret put VAPID_PUBLIC_KEY
 wrangler secret put VAPID_PRIVATE_KEY
 ```
 
-#### 7.2 Lưu subscription
+#### 7.2 Implementation
 
-Khi user cho phép notification trên PWA:
-- Frontend gọi `pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: VAPID_PUBLIC_KEY })`
-- Gửi `PushSubscription` object lên `POST /api/push/subscribe`
-- Backend lưu vào KV: key = `sub:{endpoint_hash}`, value = subscription JSON
+Worker implement Web Push theo RFC 8291 + VAPID (RFC 8292) bằng SubtleCrypto (edge-compatible, không cần thư viện bên ngoài):
 
-#### 7.3 Gửi notification
-
-Sau khi digest được tạo:
-- Lấy tất cả subscription từ KV (`list` với prefix `sub:`)
-- Dùng Web Push protocol (RFC 8291) để gửi
-- Payload: `{ title: "NewsDigest", body: "{digest summary}", data: { digestId } }`
-- Xử lý 410 Gone response (user đã unsubscribe) → xóa subscription khỏi KV
-
-Dùng thư viện `web-push` hoặc implement tay theo RFC (CF Workers hỗ trợ SubtleCrypto).
+- **Lưu subscription**: `POST /api/push/subscribe` → KV key `sub:{hash}`
+- **Gửi notification**: `broadcastPush(env, summaryText, digestId)` — encrypt payload bằng ECDH + AES-GCM
+- **Auto-cleanup**: Xử lý 410 Gone → xóa subscription expired khỏi KV
 
 ---
 
@@ -590,7 +595,7 @@ export const prefs = writable({
 
 #### 8.4 Dark mode
 
-shadcn-svelte dùng class-based dark mode của Tailwind. Cách implement:
+shadcn-svelte dùng class-based dark mode. Implementation (Svelte 5 runes):
 
 ```svelte
 <!-- src/routes/+layout.svelte -->
@@ -601,47 +606,24 @@ shadcn-svelte dùng class-based dark mode của Tailwind. Cách implement:
   import { Toaster } from '$lib/components/ui/toast';
 
   onMount(() => {
-    // Đọc từ localStorage, fallback sang system preference
     const saved = localStorage.getItem('darkMode');
     $prefs.darkMode = saved !== null
       ? saved === 'true'
       : window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // Thêm/xoá class 'dark' trên <html> — shadcn dùng class này
-  $: if (typeof document !== 'undefined') {
+  $effect(() => {
     document.documentElement.classList.toggle('dark', $prefs.darkMode);
     localStorage.setItem('darkMode', String($prefs.darkMode));
-  }
+  });
 </script>
 
 <NavBar />
 <main class="container mx-auto px-4 py-6">
-  <slot />
+  {@render children()}
 </main>
 <Toaster />
 ```
-
-`app.css` (Tailwind v4 + shadcn CSS variables):
-```css
-@import 'tailwindcss';
-@import './shadcn.css';   /* generated by shadcn init */
-```
-
-**Toggle dark mode trong UI:**
-```svelte
-<script lang="ts">
-  import { Switch } from '$lib/components/ui/switch';
-  import { Moon } from 'lucide-svelte';
-  import { prefs } from '$lib/stores/prefs';
-</script>
-
-<div class="flex items-center gap-2">
-  <Moon size={16} />
-  <Switch bind:checked={$prefs.darkMode} />
-</div>
-```
-
 
 ---
 
@@ -665,14 +647,14 @@ Khi user mở app lần đầu chưa có nguồn nào:
 
 Phát hiện chủ đề được nhiều nguồn đăng trong cùng khung giờ.
 
-Logic: sau mỗi lần cron, query các bài trong 2 giờ qua, nhóm theo tags, nếu một tag có ≥ 3 bài từ ≥ 2 nguồn khác nhau → đánh dấu `is_trending = 1`, hiển thị badge đặc biệt trên feed.
+Logic: sau mỗi lần cron, query các bài trong 6 giờ qua, nhóm theo tags, nếu một tag có ≥ 3 bài từ ≥ 2 nguồn khác nhau → đánh dấu trending, hiển thị badge đặc biệt trên feed.
 
 ### Deep summarize
 
 Khi user mở một bài, nếu `full_text` chưa có:
 - Fetch URL bài gốc
 - Extract main content (dùng heuristic hoặc Readability algorithm)
-- Gọi Gemini tóm tắt đầy đủ
+- Gọi Dify/AI tóm tắt đầy đủ
 - Cache kết quả vào bài trong D1
 
 ### Filter nâng cao
@@ -680,6 +662,14 @@ Khi user mở một bài, nếu `full_text` chưa có:
 - Lưu filter preset (ví dụ: "Chỉ AI + hot ≥ 8")
 - Filter theo khoảng thời gian
 - Tìm kiếm full-text trong title + summary (D1 FTS)
+
+### HTML auto-detect scraper
+
+Implement `fetchUnknown()`:
+- Thử các path RSS phổ biến: `/rss`, `/feed`, `/atom.xml`, `/rss.xml`, `/index.xml`
+- Tìm `<link rel="alternate" type="application/rss+xml">` trong HTML
+- Nếu không có RSS → parse HTML bằng heuristic CSS selectors
+- Lưu kết quả vào `scraper_configs` để tái dùng
 
 ---
 
@@ -697,19 +687,26 @@ Gửi digest qua Telegram Bot API hoặc email (Resend/Mailgun). User cấu hìn
 
 ### Chat với tin tức
 
-Tích hợp Dify hoặc gọi Gemini trực tiếp với context là các bài trong digest. User hỏi "Hôm nay có gì về AI không?" → AI trả lời dựa trên dữ liệu đã thu thập.
+Tích hợp Dify hoặc gọi AI trực tiếp với context là các bài trong digest. User hỏi "Hôm nay có gì về AI không?" → AI trả lời dựa trên dữ liệu đã thu thập.
+
+### Tự host AI (nếu cần scale)
+
+Nếu traffic tăng hoặc cần latency thấp, có thể chuyển từ Dify sang:
+- CF Queues + AI Worker gọi Vertex AI / OpenRouter trực tiếp
+- R2 để cache digest JSON
+- Giữ nguyên API interface, chỉ thay backend processing
 
 ---
 
 ## Checklist MVP
 
-- [ ] Bước 1: Khởi tạo SvelteKit + shadcn-svelte + wrangler.toml
-- [ ] Bước 2: Tạo D1 schema, migrate
-- [ ] Bước 3: Cron Worker — fetch RSS, HTML, Reddit, YouTube
-- [ ] Bước 4: AI Worker — Gemini tóm tắt + hot score
-- [ ] Bước 5: Digest generation + R2 cache
-- [ ] Bước 6: API Worker (Hono) — đủ endpoints
-- [ ] Bước 7: Web Push — VAPID setup + gửi notification
+- [x] Bước 1: Khởi tạo SvelteKit + shadcn-svelte + wrangler.toml
+- [x] Bước 2: Tạo D1 schema, migrate
+- [x] Bước 3: Cron Worker — fetch RSS, Reddit, YouTube, VOZ (round-robin)
+- [x] Bước 4: Dify Agent setup — tóm tắt + hot score (thay AI Worker)
+- [x] Bước 5: Digest generation (qua Dify Agent)
+- [x] Bước 6: API Worker (Hono) — đủ endpoints
+- [x] Bước 7: Web Push — VAPID + RFC 8291 implementation
 - [ ] Bước 8: SvelteKit UI — Feed, Digest, Sources, Bookmarks, Settings
 - [ ] Bước 9: Onboarding flow
 
@@ -718,11 +715,10 @@ Tích hợp Dify hoặc gọi Gemini trực tiếp với context là các bài t
 ## Ghi chú cho agent IDE
 
 - Mỗi bước có thể implement và test độc lập trước khi chuyển bước tiếp theo.
-- Bước 3 (Cron Worker) và Bước 4 (AI Worker) là phần phức tạp nhất, nên test kỹ với mock data trước.
-- **shadcn-svelte**: không import từ `@shadcn/ui` (React), phải dùng `shadcn-svelte`. Components nằm ở `$lib/components/ui/`, không edit tay — chỉ add qua CLI.
-- **Tailwind v4**: không có `tailwind.config.js`, cấu hình qua `@import` trong CSS. shadcn-svelte init sẽ tạo sẵn.
+- **Svelte 5 runes**: Project dùng Svelte 5 — dùng `$props()`, `$state()`, `$derived()`, `$effect()` thay cho `export let`, `$:`, `onMount` reactive.
+- **shadcn-svelte**: không import từ `@shadcn/ui` (React), phải dùng `shadcn-svelte`. Components ở `$lib/components/ui/`, không edit tay — chỉ add qua CLI.
+- **Tailwind v4**: không có `tailwind.config.js`, cấu hình qua `@import` trong CSS.
+- **Dify thay AI Worker**: Không cần build queue consumer hay Vertex AI integration. Dify agent gọi Worker API.
 - YouTube adapter cần `YOUTUBE_API_KEY` riêng — dùng `wrangler secret put YOUTUBE_API_KEY`.
-- Vertex AI Gemini endpoint: `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={VERTEX_API_KEY}`.
-- VOZ và Reddit không cần key nhưng cần User-Agent header hợp lệ.
 - Dùng `wrangler dev` để test local, `wrangler deploy` để push production.
 - D1 local dev: `wrangler d1 execute newsdigest --local --file=schema.sql`.

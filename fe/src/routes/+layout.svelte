@@ -4,12 +4,14 @@
   import { api } from '$lib/api';
   import NavBar from '$lib/components/app/NavBar.svelte';
   import '../app.css';
-
-  let mounted = false;
-
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { sources } from '$lib/stores/sources';
+  import type { Snippet } from 'svelte';
+
+  let { children }: { children: Snippet } = $props();
+
+  let mounted = $state(false);
 
   onMount(async () => {
     const saved = localStorage.getItem('darkMode');
@@ -29,16 +31,27 @@
           goto('/onboarding');
         }
       }
-    } catch(e) {}
+    } catch(e) {
+      // Mock sources for testing when backend is unavailable
+      if ($sources.length === 0) {
+        $sources = [
+          { id: 'mock-1', url: 'https://news.ycombinator.com/rss', name: 'HackerNews', type: 'rss' as const, enabled: 1, group_name: 'Tech', last_fetched_at: null, created_at: new Date().toISOString() },
+          { id: 'mock-2', url: 'https://vnexpress.net/rss/tin-moi-nhat.rss', name: 'VnExpress', type: 'rss' as const, enabled: 1, group_name: 'News', last_fetched_at: null, created_at: new Date().toISOString() },
+          { id: 'mock-3', url: 'https://blog.cloudflare.com/rss/', name: 'Cloudflare Blog', type: 'rss' as const, enabled: 1, group_name: 'Tech', last_fetched_at: null, created_at: new Date().toISOString() },
+        ];
+      }
+    }
   });
 
-  $: if (mounted && typeof document !== 'undefined') {
-    document.documentElement.classList.toggle('dark', $prefs.darkMode);
-    localStorage.setItem('darkMode', String($prefs.darkMode));
-  }
+  $effect(() => {
+    if (mounted && typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', $prefs.darkMode);
+      localStorage.setItem('darkMode', String($prefs.darkMode));
+    }
+  });
 </script>
 
 <NavBar />
 <main class="container mx-auto px-4 py-6">
-  <slot />
+  {@render children()}
 </main>

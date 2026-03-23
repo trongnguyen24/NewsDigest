@@ -17,10 +17,26 @@ app.get('/api/articles', async (c) => {
     const sort = c.req.query('sort') === 'hot' ? 'hot_score DESC' : 'fetched_at DESC';
     const bookmarked = c.req.query('bookmarked');
     const unsummarized = c.req.query('unsummarized');
+    const compact = c.req.query('compact');
+    const ids = c.req.query('ids');
     const offset = (page - 1) * limit;
+
+    // compact=1 → chỉ trả id, title, url, source_id, published_at (không full_text)
+    const fields = compact === '1'
+        ? 'id, title, url, source_id, published_at'
+        : '*';
 
     let where = 'WHERE 1=1';
     const binds: any[] = [];
+
+    // ids filter: GET /api/articles?ids=id1,id2,id3
+    if (ids) {
+        const idList = ids.split(',').map(s => s.trim()).filter(Boolean);
+        if (idList.length > 0) {
+            where += ` AND id IN (${idList.map(() => '?').join(',')})`;
+            binds.push(...idList);
+        }
+    }
 
     if (tag) { where += ' AND tags LIKE ?'; binds.push(`%"${tag}"%`); }
     if (sourceId) { where += ' AND source_id = ?'; binds.push(sourceId); }
@@ -30,7 +46,7 @@ app.get('/api/articles', async (c) => {
 
     const countStmt = c.env.DB.prepare(`SELECT COUNT(*) as total FROM articles ${where}`);
     const dataStmt = c.env.DB.prepare(
-        `SELECT * FROM articles ${where} ORDER BY ${sort} LIMIT ? OFFSET ?`
+        `SELECT ${fields} FROM articles ${where} ORDER BY ${sort} LIMIT ? OFFSET ?`
     );
 
     const countBinds = [...binds];
@@ -64,6 +80,109 @@ app.patch('/api/articles/:id/read', async (c) => {
     const id = c.req.param('id');
     await c.env.DB.prepare('UPDATE articles SET is_read = 1 WHERE id = ?').bind(id).run();
     return c.json({ ok: true });
+});
+
+/**
+ * POST /api/articles/enrich
+ * Fetch nội dung bài viết từ URL gốc cho các article chưa có full_text tốt.
+ * Body: { ids: ["id1", "id2", ...], force?: boolean }
+ * Sẽ fetch song song (tối đa 5 cùng lúc) và update full_text vào DB.
+ */
+app.post('/api/articles/enrich', async (c) => {
+    const body = await c.req.json();
+    const ids = body.ids;
+    const force = body.force === true;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return c.json({ error: 'ids array required' }, 400);
+    }
+
+    const placeholders = ids.map(() => '?').join(',');
+    const { results } = await c.env.DB.prepare(
+        `SELECT id, url, full_text FROM articles WHERE id IN (${placeholders})`
+    ).bind(...ids).all();
+
+    if (!results || results.length === 0) {
+        return c.json({ ok: true, enriched: 0, message: 'No articles found' });
+    }
+
+    const { extractArticleContent } = await import('../cron/scraper');
+    const enrichResults: { id: string; success: boolean; chars: number; skipped?: boolean; note?: string }[] = [];
+
+    // Kiểm tra full_text có phải rác không
+    function isLowQuality(text: string | null): boolean {
+        if (!text || text.length < 100) return true;
+        // HN RSS metadata
+        if (text.includes('Article URL:') && text.includes('Points:')) return true;
+        // Reddit navigation
+        if (text.includes('Skip to main content') || text.includes('Go to Reddit Home')) return true;
+        // Chủ yếu HTML tags
+        const stripped = text.replace(/<[^>]+>/g, '').trim();
+        if (stripped.length < 100) return true;
+        return false;
+    }
+
+    // Trích xuất URL bài gốc từ HN RSS description
+    function extractHNArticleUrl(fullText: string): string | null {
+        const match = fullText.match(/Article URL:\s*<a href="([^"]+)"/);
+        return match ? match[1] : null;
+    }
+
+    const articles = results as any[];
+    for (let i = 0; i < articles.length; i += 5) {
+        const batch = articles.slice(i, i + 5);
+        const promises = batch.map(async (art: any) => {
+            // Skip nếu đã có full_text tốt (trừ khi force=true)
+            if (!force && art.full_text && !isLowQuality(art.full_text)) {
+                return { id: art.id, success: true, chars: art.full_text.length, skipped: true };
+            }
+
+            // Skip Reddit URLs (JS-rendered, không extract được)
+            if (art.url.includes('reddit.com')) {
+                return { id: art.id, success: false, chars: 0, note: 'Reddit URLs are JS-rendered' };
+            }
+
+            // Xác định URL cần fetch
+            let fetchUrl = art.url;
+
+            // Nếu bài HN, lấy article URL thay vì HN page
+            if (art.full_text && extractHNArticleUrl(art.full_text)) {
+                fetchUrl = extractHNArticleUrl(art.full_text)!;
+            } else if (art.url.includes('news.ycombinator.com')) {
+                // Ask HN / Show HN — nội dung nằm trong RSS description, chỉ cần strip HTML
+                if (art.full_text) {
+                    const cleaned = art.full_text
+                        .replace(/<hr\s*\/?>/gi, '\n---\n')
+                        .replace(/<p>/gi, '\n')
+                        .replace(/<[^>]+>/g, '')
+                        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+                        // Loại bỏ metadata cuối (Comments URL, Points)
+                        .replace(/\n---\n[\s\S]*$/, '')
+                        .trim();
+                    if (cleaned.length > 50) {
+                        await c.env.DB.prepare('UPDATE articles SET full_text = ? WHERE id = ?')
+                            .bind(cleaned, art.id).run();
+                        return { id: art.id, success: true, chars: cleaned.length };
+                    }
+                }
+                return { id: art.id, success: false, chars: 0, note: 'HN text post with no content' };
+            }
+
+            const content = await extractArticleContent(fetchUrl);
+            if (content && content.length > 50) {
+                await c.env.DB.prepare('UPDATE articles SET full_text = ? WHERE id = ?')
+                    .bind(content, art.id).run();
+                return { id: art.id, success: true, chars: content.length };
+            }
+            return { id: art.id, success: false, chars: 0, note: 'Could not extract content' };
+        });
+
+        const batchResults = await Promise.all(promises);
+        enrichResults.push(...batchResults);
+    }
+
+    const enriched = enrichResults.filter(r => r.success && !r.skipped).length;
+    return c.json({ ok: true, enriched, total: articles.length, results: enrichResults });
 });
 
 // ── Dify Integration ─────────────────────────────────────
@@ -215,6 +334,42 @@ app.post('/api/sources/:id/fetch', async (c) => {
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }
+});
+
+/**
+ * POST /api/sources/fetch-all
+ * Fetch bài mới từ TẤT CẢ sources đang enabled.
+ * Dùng cho Dify agent để giảm số lượng API calls.
+ */
+app.post('/api/sources/fetch-all', async (c) => {
+    const { results: sources } = await c.env.DB.prepare('SELECT * FROM sources WHERE enabled = 1').all();
+    if (!sources || sources.length === 0) return c.json({ ok: true, results: [], message: 'No enabled sources' });
+
+    const { fetchSource } = await import('../cron/scraper');
+    const fetchResults = [];
+
+    for (const source of sources) {
+        const src = source as any;
+        try {
+            const articles = await fetchSource(src, c.env);
+            let insertedCount = 0;
+            for (const art of articles) {
+                const aId = crypto.randomUUID();
+                const result = await c.env.DB.prepare(
+                    `INSERT OR IGNORE INTO articles (id, source_id, url, title, full_text, published_at)
+                     VALUES (?, ?, ?, ?, ?, ?)`
+                ).bind(aId, src.id, art.url, art.title, art.full_text || '', art.published_at || new Date().toISOString()).run();
+                if (result.meta && result.meta.changes > 0) insertedCount++;
+            }
+            fetchResults.push({ source_id: src.id, name: src.name, fetched: articles.length, inserted: insertedCount });
+        } catch (e: any) {
+            fetchResults.push({ source_id: src.id, name: src.name, error: e.message });
+        }
+    }
+
+    const totalFetched = fetchResults.reduce((sum, r) => sum + (r.fetched || 0), 0);
+    const totalInserted = fetchResults.reduce((sum, r) => sum + (r.inserted || 0), 0);
+    return c.json({ ok: true, total_fetched: totalFetched, total_inserted: totalInserted, results: fetchResults });
 });
 
 // ── Push ─────────────────────────────────────────────────

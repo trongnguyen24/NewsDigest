@@ -5,8 +5,8 @@
   import type { Article } from '$lib/types';
   import { api } from '$lib/api';
 
-  let bookmarks: Article[] = [];
-  let isLoading = true;
+  let bookmarks = $state<Article[]>([]);
+  let isLoading = $state(true);
 
   onMount(async () => {
     try {
@@ -35,7 +35,7 @@
 {#if isLoading}
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
     {#each Array(3) as _}
-       <div class="h-[250px] bg-muted animate-pulse rounded-lg bg-secondary/50"></div>
+       <div class="h-[250px] bg-muted animate-pulse rounded-lg"></div>
     {/each}
   </div>
 {:else if bookmarks.length === 0}

@@ -168,3 +168,107 @@ async function fetchUnknown(source: Source): Promise<ArticleInput[]> {
   console.log(`Fallback fetch for HTML source ${source.url} not fully implemented yet.`);
   return [];
 }
+
+/**
+ * Fetch nội dung bài viết từ URL gốc.
+ * Dùng HTMLRewriter để extract text từ content tags.
+ * Focus vào <article>, <main>, hoặc body content.
+ * Giới hạn 5000 ký tự.
+ */
+export async function extractArticleContent(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) return '';
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) return '';
+
+    const paragraphs: string[] = [];
+    let currentParagraph = '';
+    let totalLen = 0;
+    const MAX_CHARS = 5000;
+
+    // Decode HTML entities
+    function decodeEntities(s: string): string {
+      return s
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+        .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec)));
+    }
+
+    class ContentExtractor {
+      text(text: Text) {
+        if (totalLen >= MAX_CHARS) return;
+        const t = text.text.trim();
+        if (t) {
+          currentParagraph += ' ' + t;
+        }
+      }
+    }
+
+    class ParagraphHandler {
+      element(_el: Element) {
+        if (totalLen >= MAX_CHARS) return;
+        // Kết thúc paragraph trước
+        if (currentParagraph.trim()) {
+          const clean = decodeEntities(currentParagraph.trim());
+          // Bỏ qua đoạn text quá ngắn (menu items, buttons, etc.)
+          if (clean.length > 20) {
+            paragraphs.push(clean);
+            totalLen += clean.length;
+          }
+        }
+        currentParagraph = '';
+      }
+    }
+
+    const rewriter = new HTMLRewriter()
+      // Remove noise elements
+      .on('script, style, noscript, svg, iframe, form, button, input, select, textarea', {
+        element(el: Element) { el.remove(); }
+      })
+      .on('nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"]', {
+        element(el: Element) { el.remove(); }
+      })
+      .on('.ad, .ads, .advertisement, .sidebar, .menu, .nav, .cookie, .popup, .modal, .share, .social, .comments, .related, .recommended', {
+        element(el: Element) { el.remove(); }
+      })
+      // Handle paragraph boundaries
+      .on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, div, section, article', new ParagraphHandler())
+      // Extract text from content elements only
+      .on('p, h1, h2, h3, h4, h5, h6, li, blockquote, figcaption, pre, td, th', new ContentExtractor());
+
+    await rewriter.transform(response).text();
+
+    // Flush last paragraph
+    if (currentParagraph.trim()) {
+      const clean = decodeEntities(currentParagraph.trim());
+      if (clean.length > 20) {
+        paragraphs.push(clean);
+      }
+    }
+
+    const result = paragraphs
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+      .slice(0, MAX_CHARS);
+
+    return result;
+  } catch {
+    return '';
+  }
+}
