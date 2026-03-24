@@ -11,10 +11,10 @@
 
 ### Chiến lược: Cloudflare + Dify hybrid
 
-Dự án kết hợp **Cloudflare Workers** (fetch/API/push) với **Dify Agent** (AI summarize/scoring) để **tối ưu chi phí**:
+Dự án kết hợp **Cloudflare Workers** (fetch/API/push) với **Dify Workflow** (AI summarize/scoring) để **tối ưu chi phí**:
 
 - **Cloudflare Workers** (Free tier): xử lý mọi logic không cần AI — fetch bài, API cho frontend, cron, push notification.
-- **Dify Agent** (Free tier + OpenRouter): xử lý phần AI — tóm tắt, chấm điểm, viết digest. Chạy qua tool-calling, gọi API của Worker.
+- **Dify Workflow** (Free tier + Gemini): xử lý phần AI — tóm tắt, chấm điểm, viết digest. Dùng HTTP Request nodes gọi API Worker + LLM node cho AI (chỉ 1 lần gọi).
 
 > Cách này loại bỏ nhu cầu Vertex AI, CF Queues, và CF R2 trong giai đoạn MVP, giảm chi phí về gần ~$0.
 
@@ -30,28 +30,28 @@ Dự án kết hợp **Cloudflare Workers** (fetch/API/push) với **Dify Agent*
 | Scheduler | Cloudflare Workers Cron Trigger |
 | Database | Cloudflare D1 (SQLite at edge) |
 | KV Store | Cloudflare KV |
-| AI tóm tắt + scoring | Dify Agent (via OpenRouter → Gemini/Llama) |
+| AI tóm tắt + scoring | Dify Workflow (HTTP nodes + LLM node, Gemini Flash) |
 | Push notification | Web Push API (VAPID) qua CF Worker |
 
 ### Kiến trúc tổng thể
 
 ```
-[Nguồn tin]           [Cloudflare Edge]                    [Dify Agent]
+[Nguồn tin]           [Cloudflare Edge]                    [Dify Workflow]
   RSS/Atom  ──────▶  Cron Worker (3h, round-robin)
   HTML Blog ──────▶    │ fetch + parse via scraper
   Reddit    ──────▶    │ dedup (INSERT OR IGNORE)
   YouTube   ──────▶    ▼
   VOZ       ──────▶  CF D1 (articles, sources, digests)
-                       ▲                                   Dify (OpenRouter)
-                       │                                     │ get_sources
-[Frontend]             │                                     │ fetch_source_articles
-  SvelteKit PWA ────▶ API Worker (Hono)                     │ get_unsummarized
-  CF Pages             │ CORS                                │ [AI summarize]
-                       │ articles/sources/digest/push        │ save_summaries
-                       ▼                                     │ save_digest
-                     Web Push (VAPID, RFC 8291)              ▼
-                       │                                   Gọi API Worker
-                     Browser notification                  để lưu kết quả
+                       ▲                                   Dify Workflow:
+                       │                                     [HTTP] fetch-all
+[Frontend]             │                                     [HTTP] get articles
+  SvelteKit PWA ────▶ API Worker (Hono)                     [Code] parse
+  CF Pages             │ CORS                                [IF] has articles?
+                       │ articles/sources/digest/push        [LLM] summarize (1 call)
+                       ▼                                     [HTTP] save summaries
+                     Web Push (VAPID, RFC 8291)              [HTTP] save digest
+                       │
+                     Browser notification
 ```
 
 ---
@@ -344,31 +344,33 @@ Xử lý theo `source.type`:
 
 ---
 
-### Bước 4 — Dify Agent: tóm tắt và chấm điểm
+### Bước 4 — Dify Workflow: tóm tắt và chấm điểm
 
-> **Thay thế cho AI Worker nội bộ.** Dify Agent xử lý toàn bộ AI logic, gọi Worker API để đọc/ghi dữ liệu.
+> **Thay thế cho AI Worker nội bộ.** Dify Workflow dùng HTTP nodes cho API calls + LLM node cho AI summarize. Chỉ dùng AI 1 lần duy nhất.
 
 Chi tiết setup Dify → xem [docs/dify-setup.md](docs/dify-setup.md).
 
-#### 4.1 Quy trình của Dify Agent
+#### 4.1 Quy trình Workflow (deterministic)
 
 ```
-1. get_sources()              → GET  /api/sources
-2. fetch_source_articles(id)  → POST /api/sources/:id/fetch
-3. get_unsummarized_articles()→ GET  /api/articles?unsummarized=1&limit=30
-4. [AI tóm tắt + chấm điểm hot_score + gắn tags]
-5. save_summaries()           → POST /api/articles/summarize
-6. save_digest()              → POST /api/digest
+[HTTP] POST /api/sources/fetch-all      → Fetch tất cả bài
+[HTTP] GET  /api/articles?unsummarized=1 → Lấy bài chưa tóm tắt
+[Code] Parse JSON response               → Format cho LLM
+[IF]   article_count > 0?                → Kiểm tra có bài
+[LLM]  Summarize + Score + Digest        → AI (1 lần gọi duy nhất)
+[Code] Parse LLM output                  → Tạo payloads
+[HTTP] POST /api/articles/summarize      → Lưu summaries
+[HTTP] POST /api/digest                  → Lưu digest
 ```
 
-#### 4.2 Tại sao dùng Dify thay vì AI Worker?
+#### 4.2 Tại sao dùng Dify Workflow thay vì Agent hoặc AI Worker?
 
-| | AI Worker (CF Queues + Vertex AI) | Dify Agent (OpenRouter) |
-|---|---|---|
-| Chi phí | Vertex AI pricing + Queue usage | OpenRouter free tier / rẻ |
-| Complexity | Phải build queue consumer, retry logic | Dify xử lý hết, chỉ cần setup tools |
-| Flexibility | Hardcode prompt trong code | Thay đổi prompt/model qua UI |
-| Monitoring | Phải tự log | Dify dashboard có sẵn |
+| | AI Worker (CF Queues) | Dify Agent (tool-calling) | Dify Workflow |
+|---|---|---|---|
+| Chi phí | Vertex AI pricing | Nhiều token (ReAct reasoning) | **Ít token nhất** |
+| Complexity | Build queue consumer | Setup tools | **Chỉ import YML** |
+| Flexibility | Hardcode prompt | Thay model/prompt qua UI | **Thay model/prompt qua UI** |
+| Reliability | Phụ thuộc queue | Agent có thể bỏ bước | **Deterministic** |
 
 #### 4.3 Endpoints cho Dify
 
@@ -395,17 +397,11 @@ Worker cung cấp 2 endpoint đặc biệt cho Dify:
 
 ### Bước 5 — Digest generation
 
-Digest được tạo bởi **Dify Agent** (không tự động trong Worker).
+Digest được tạo bởi **Dify Workflow** trong cùng 1 LLM call với bước summarize.
 
 #### 5.1 Logic
 
-```
-Dify Agent:
-  1. Sau khi summarize xong tất cả bài
-  2. Chọn top bài hot_score cao nhất
-  3. Viết đoạn tổng quan 3-5 câu
-  4. Gọi POST /api/digest để lưu
-```
+LLM node output JSON chứa cả `summaries` và `digest_text` + `top_article_ids`. Code node parse và gửi về Worker qua 2 HTTP requests riêng.
 
 #### 5.2 Đọc digest
 
@@ -703,8 +699,8 @@ Nếu traffic tăng hoặc cần latency thấp, có thể chuyển từ Dify sa
 - [x] Bước 1: Khởi tạo SvelteKit + shadcn-svelte + wrangler.toml
 - [x] Bước 2: Tạo D1 schema, migrate
 - [x] Bước 3: Cron Worker — fetch RSS, Reddit, YouTube, VOZ (round-robin)
-- [x] Bước 4: Dify Agent setup — tóm tắt + hot score (thay AI Worker)
-- [x] Bước 5: Digest generation (qua Dify Agent)
+- [x] Bước 4: Dify Workflow setup — tóm tắt + hot score (HTTP + LLM deterministic)
+- [x] Bước 5: Digest generation (qua Dify Workflow, cùng 1 LLM call)
 - [x] Bước 6: API Worker (Hono) — đủ endpoints
 - [x] Bước 7: Web Push — VAPID + RFC 8291 implementation
 - [ ] Bước 8: SvelteKit UI — Feed, Digest, Sources, Bookmarks, Settings
@@ -718,7 +714,7 @@ Nếu traffic tăng hoặc cần latency thấp, có thể chuyển từ Dify sa
 - **Svelte 5 runes**: Project dùng Svelte 5 — dùng `$props()`, `$state()`, `$derived()`, `$effect()` thay cho `export let`, `$:`, `onMount` reactive.
 - **shadcn-svelte**: không import từ `@shadcn/ui` (React), phải dùng `shadcn-svelte`. Components ở `$lib/components/ui/`, không edit tay — chỉ add qua CLI.
 - **Tailwind v4**: không có `tailwind.config.js`, cấu hình qua `@import` trong CSS.
-- **Dify thay AI Worker**: Không cần build queue consumer hay Vertex AI integration. Dify agent gọi Worker API.
+- **Dify Workflow thay AI Worker**: Không cần build queue consumer hay Vertex AI integration. Dify workflow dùng HTTP nodes gọi API + LLM node cho AI. Import `Daily AI News Digest.yml` để setup.
 - YouTube adapter cần `YOUTUBE_API_KEY` riêng — dùng `wrangler secret put YOUTUBE_API_KEY`.
 - Dùng `wrangler dev` để test local, `wrangler deploy` để push production.
 - D1 local dev: `wrangler d1 execute newsdigest --local --file=schema.sql`.

@@ -1,0 +1,604 @@
+app:
+  description: Automatically collect and generate daily AI news and product updates
+    in HTML format
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: workflow
+  name: Daily AI News Digest
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.6.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - local_file
+      - remote_url
+      enabled: false
+      fileUploadConfig:
+        attachment_image_file_size_limit: 2
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        file_upload_limit: 50
+        image_file_batch_limit: 10
+        image_file_size_limit: 10
+        single_chunk_attachment_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInLoop: false
+        sourceType: start
+        targetType: http-request
+      id: start-source-fetch-all-target
+      source: start
+      sourceHandle: source
+      target: '1774300001'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: http-request
+        targetType: http-request
+      id: fetch-all-source-get-unsummarized-target
+      source: '1774300001'
+      sourceHandle: source
+      target: '1774300002'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: http-request
+        targetType: code
+      id: get-unsummarized-source-parse-articles-target
+      source: '1774300002'
+      sourceHandle: source
+      target: '1774300003'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: if-else
+      id: parse-articles-source-if-has-articles-target
+      source: '1774300003'
+      sourceHandle: source
+      target: '1774300004'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: if-has-articles-true-llm-summarize-target
+      source: '1774300004'
+      sourceHandle: 'true'
+      target: '1774300005'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: end
+      id: if-has-articles-false-end-no-articles-target
+      source: '1774300004'
+      sourceHandle: 'false'
+      target: '1774300010'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: code
+      id: llm-summarize-source-parse-output-target
+      source: '1774300005'
+      sourceHandle: source
+      target: '1774300006'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: http-request
+      id: parse-output-source-save-summaries-target
+      source: '1774300006'
+      sourceHandle: source
+      target: '1774300007'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: http-request
+        targetType: http-request
+      id: save-summaries-source-save-digest-target
+      source: '1774300007'
+      sourceHandle: source
+      target: '1774300008'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: http-request
+        targetType: end
+      id: save-digest-source-end-success-target
+      source: '1774300008'
+      sourceHandle: source
+      target: '1774300009'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    # ── Node 1: Start ─────────────────────────────────────
+    - data:
+        desc: ''
+        selected: false
+        title: Start
+        type: start
+        variables: []
+      height: 73
+      id: start
+      position:
+        x: 80
+        y: 200
+      positionAbsolute:
+        x: 80
+        y: 200
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 2: HTTP - Fetch All Sources ──────────────────
+    - data:
+        authorization:
+          config: null
+          type: no-auth
+        body:
+          data: ''
+          type: none
+        desc: 'Fetch bài mới từ tất cả sources đang enabled'
+        headers: ''
+        method: post
+        params: ''
+        selected: false
+        timeout:
+          connect: 10
+          max_connect_timeout: 0
+          max_read_timeout: 0
+          max_write_timeout: 0
+          read: 120
+          write: 30
+        title: 'Fetch All Sources'
+        type: http-request
+        url: 'https://newsdigest.trongnguyenchromeos.workers.dev/api/sources/fetch-all'
+        variables: []
+      height: 154
+      id: '1774300001'
+      position:
+        x: 380
+        y: 200
+      positionAbsolute:
+        x: 380
+        y: 200
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 3: HTTP - Get Unsummarized Articles ──────────
+    - data:
+        authorization:
+          config: null
+          type: no-auth
+        body:
+          data: ''
+          type: none
+        desc: 'Lấy tối đa 30 bài chưa được AI tóm tắt'
+        headers: ''
+        method: get
+        params: 'unsummarized=1&limit=30'
+        selected: false
+        timeout:
+          connect: 10
+          max_connect_timeout: 0
+          max_read_timeout: 0
+          max_write_timeout: 0
+          read: 60
+          write: 10
+        title: 'Get Unsummarized Articles'
+        type: http-request
+        url: 'https://newsdigest.trongnguyenchromeos.workers.dev/api/articles?unsummarized=1&limit=30'
+        variables: []
+      height: 154
+      id: '1774300002'
+      position:
+        x: 680
+        y: 200
+      positionAbsolute:
+        x: 680
+        y: 200
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 4: Code - Parse Articles Response ────────────
+    - data:
+        code: "import json\n\ndef main(body: str) -> dict:\n    try:\n        data\
+          \ = json.loads(body)\n    except:\n        return {\"articles_text\": \"\"\
+          , \"article_count\": 0, \"article_ids\": \"\"}\n\n    articles = data.get(\"\
+          articles\", [])\n    count = len(articles)\n\n    if count == 0:\n       \
+          \ return {\"articles_text\": \"\", \"article_count\": 0, \"article_ids\"\
+          : \"\"}\n\n    formatted = []\n    ids = []\n    for art in articles:\n  \
+          \      aid = art.get(\"id\", \"\")\n        ids.append(aid)\n        title\
+          \ = art.get(\"title\", \"N/A\")\n        full_text = art.get(\"full_text\"\
+          , \"\") or \"\"\n        # Giới hạn full_text 2000 ký tự để tiết kiệm token\n\
+          \        if len(full_text) > 2000:\n            full_text = full_text[:2000]\
+          \ + \"...\"\n        formatted.append(f\"ID: {aid}\\nTitle: {title}\\nContent:\
+          \ {full_text}\\n---\")\n\n    return {\n        \"articles_text\": \"\\n\"\
+          .join(formatted),\n        \"article_count\": count,\n        \"article_ids\"\
+          : \",\".join(ids)\n    }\n"
+        code_language: python3
+        desc: 'Parse JSON response, format articles cho LLM'
+        outputs:
+          article_count:
+            children: null
+            type: number
+          article_ids:
+            children: null
+            type: string
+          articles_text:
+            children: null
+            type: string
+        selected: false
+        title: 'Parse Articles'
+        type: code
+        variables:
+        - value_selector:
+          - '1774300002'
+          - body
+          variable: body
+      height: 102
+      id: '1774300003'
+      position:
+        x: 980
+        y: 200
+      positionAbsolute:
+        x: 980
+        y: 200
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 5: IF - Has Articles? ────────────────────────
+    - data:
+        conditions:
+        - comparison_operator: greater-than
+          id: cond-has-articles
+          value: '0'
+          varType: number
+          variable_selector:
+          - '1774300003'
+          - article_count
+        desc: 'Kiểm tra có bài cần tóm tắt không'
+        logical_operator: and
+        selected: false
+        title: 'Has Articles?'
+        type: if-else
+      height: 126
+      id: '1774300004'
+      position:
+        x: 1280
+        y: 200
+      positionAbsolute:
+        x: 1280
+        y: 200
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 6: LLM - Summarize & Score ───────────────────
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 'AI tóm tắt + chấm hot_score + gắn tags + viết digest'
+        memory: null
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          model: gemini-3-flash-preview
+          provider: langgenius/gemini/google
+        prompt_template:
+        - id: prompt-system-summarize
+          role: system
+          text: >-
+            Bạn là AI news analyst chuyên tóm tắt và đánh giá tin tức công nghệ.
+
+            Bạn sẽ nhận danh sách các bài viết. Nhiệm vụ:
+
+            1. Tóm tắt mỗi bài bằng tiếng Việt (2-3 câu ngắn gọn)
+
+            2. Chấm hot_score (1-10): 10=viral/major, 7-8=hay, 5-6=bình thường, 3-4=nhàm, 1-2=spam
+
+            3. Gắn tối đa 3 tags từ: AI, Tech, Security, Business, Vietnam, World, Dev, Science, Crypto, Policy, Entertainment
+
+            4. Viết 1 đoạn digest 3-5 câu tổng hợp xu hướng nổi bật
+
+            5. Chọn 3-5 bài hot nhất (top_article_ids)
+
+
+            Giữ nguyên thuật ngữ kỹ thuật (AI, API, Docker, etc.)
+
+            Nếu bài tiếng Anh, dịch tóm tắt sang tiếng Việt.
+
+
+            QUAN TRỌNG: Output PHẢI là JSON hợp lệ theo format sau, KHÔNG có text nào khác:
+
+            ```json
+
+            {
+              "summaries": [
+                {
+                  "id": "article-uuid",
+                  "summary": "Tóm tắt tiếng Việt 2-3 câu",
+                  "hot_score": 7,
+                  "tags": ["AI", "Tech"]
+                }
+              ],
+              "digest_text": "Đoạn tổng hợp 3-5 câu về xu hướng nổi bật...",
+              "top_article_ids": ["id1", "id2", "id3"]
+            }
+
+            ```
+        - id: prompt-user-summarize
+          role: user
+          text: >-
+            Hãy phân tích và tóm tắt các bài viết sau:
+
+
+            {{#1774300003.articles_text#}}
+        selected: false
+        title: 'AI Summarize & Score'
+        type: llm
+        vision:
+          enabled: false
+      height: 198
+      id: '1774300005'
+      position:
+        x: 1580
+        y: 120
+      positionAbsolute:
+        x: 1580
+        y: 120
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 7: Code - Parse LLM Output ───────────────────
+    - data:
+        code: "import json\nimport re\n\ndef main(llm_output: str) -> dict:\n    text\
+          \ = llm_output.strip()\n\n    # Trích xuất JSON từ markdown code block nếu\
+          \ có\n    json_match = re.search(r'```(?:json)?\\s*\\n?(.*?)\\n?```', text,\
+          \ re.DOTALL)\n    if json_match:\n        text = json_match.group(1).strip()\n\
+          \n    try:\n        data = json.loads(text)\n    except json.JSONDecodeError:\n\
+          \        # Fallback: tìm { ... } lớn nhất\n        brace_match = re.search(r'\\{[\\s\\S]*\\}',\
+          \ text)\n        if brace_match:\n            try:\n                data\
+          \ = json.loads(brace_match.group())\n            except:\n               \
+          \ return {\n                    \"summaries_payload\": json.dumps({\"results\"\
+          : []}),\n                    \"digest_payload\": json.dumps({\"summary_text\"\
+          : \"Lỗi parse LLM output\", \"top_article_ids\": []})\n                }\n\
+          \        else:\n            return {\n                \"summaries_payload\"\
+          : json.dumps({\"results\": []}),\n                \"digest_payload\": json.dumps({\"summary_text\"\
+          : \"Lỗi parse LLM output\", \"top_article_ids\": []})\n            }\n\n\
+          \    summaries = data.get(\"summaries\", [])\n    digest_text = data.get(\"\
+          digest_text\", \"\")\n    top_ids = data.get(\"top_article_ids\", [])\n\n\
+          \    return {\n        \"summaries_payload\": json.dumps({\"results\": summaries}),\n\
+          \        \"digest_payload\": json.dumps({\"summary_text\": digest_text, \"\
+          top_article_ids\": top_ids})\n    }\n"
+        code_language: python3
+        desc: 'Parse JSON output từ LLM, tạo payload cho API calls'
+        outputs:
+          digest_payload:
+            children: null
+            type: string
+          summaries_payload:
+            children: null
+            type: string
+        selected: false
+        title: 'Parse LLM Output'
+        type: code
+        variables:
+        - value_selector:
+          - '1774300005'
+          - text
+          variable: llm_output
+      height: 102
+      id: '1774300006'
+      position:
+        x: 1880
+        y: 120
+      positionAbsolute:
+        x: 1880
+        y: 120
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 8: HTTP - Save Summaries ─────────────────────
+    - data:
+        authorization:
+          config: null
+          type: no-auth
+        body:
+          data: '{{#1774300006.summaries_payload#}}'
+          type: raw-text
+        desc: 'POST kết quả tóm tắt về Worker lưu vào D1'
+        headers: 'Content-Type: application/json'
+        method: post
+        params: ''
+        selected: false
+        timeout:
+          connect: 10
+          max_connect_timeout: 0
+          max_read_timeout: 0
+          max_write_timeout: 0
+          read: 60
+          write: 30
+        title: 'Save Summaries'
+        type: http-request
+        url: 'https://newsdigest.trongnguyenchromeos.workers.dev/api/articles/summarize'
+        variables: []
+      height: 154
+      id: '1774300007'
+      position:
+        x: 2180
+        y: 120
+      positionAbsolute:
+        x: 2180
+        y: 120
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 9: HTTP - Save Digest ────────────────────────
+    - data:
+        authorization:
+          config: null
+          type: no-auth
+        body:
+          data: '{{#1774300006.digest_payload#}}'
+          type: raw-text
+        desc: 'POST digest tổng hợp về Worker'
+        headers: 'Content-Type: application/json'
+        method: post
+        params: ''
+        selected: false
+        timeout:
+          connect: 10
+          max_connect_timeout: 0
+          max_read_timeout: 0
+          max_write_timeout: 0
+          read: 60
+          write: 30
+        title: 'Save Digest'
+        type: http-request
+        url: 'https://newsdigest.trongnguyenchromeos.workers.dev/api/digest'
+        variables: []
+      height: 154
+      id: '1774300008'
+      position:
+        x: 2480
+        y: 120
+      positionAbsolute:
+        x: 2480
+        y: 120
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 10: End (Success) ────────────────────────────
+    - data:
+        desc: ''
+        outputs:
+        - value_selector:
+          - '1774300008'
+          - body
+          variable: result
+        selected: false
+        title: 'End'
+        type: end
+      height: 90
+      id: '1774300009'
+      position:
+        x: 2780
+        y: 120
+      positionAbsolute:
+        x: 2780
+        y: 120
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    # ── Node 11: End (No Articles) ────────────────────────
+    - data:
+        desc: 'Không có bài mới cần tóm tắt'
+        outputs:
+        - value_selector:
+          - '1774300003'
+          - article_count
+          variable: result
+        selected: false
+        title: 'End - No Articles'
+        type: end
+      height: 90
+      id: '1774300010'
+      position:
+        x: 1580
+        y: 350
+      positionAbsolute:
+        x: 1580
+        y: 350
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    viewport:
+      x: 0
+      y: 100
+      zoom: 0.65
+  rag_pipeline_variables: []

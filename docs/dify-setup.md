@@ -1,19 +1,21 @@
-# Hướng dẫn Setup Dify Agent cho NewsDigest
+# Hướng dẫn Setup Dify Workflow cho NewsDigest
 
 ## Tổng quan
 
-NewsDigest dùng **Dify agent** thay cho AI Worker nội bộ. Agent hoạt động như một **AI news reader** — gọi API của Cloudflare Worker để fetch bài, đọc nội dung, tóm tắt + chấm điểm, rồi gửi kết quả về lại Worker lưu vào D1.
+NewsDigest dùng **Dify Workflow** để xử lý AI. Workflow hoạt động theo flow deterministic: các bước fetch/lưu dữ liệu dùng **HTTP Request node** (không cần AI), chỉ bước tóm tắt + chấm điểm mới dùng **LLM node**.
 
 ### Kiến trúc
 
 ```
-Dify Agent (AI)
-  │  1. get_sources         → Worker API
-  │  2. fetch_source_articles → Worker API → Cron scraper
-  │  3. get_unsummarized_articles → Worker API
-  │  4. [Agent tự tóm tắt + chấm điểm]
-  │  5. save_summaries      → Worker API → D1
-  │  6. save_digest          → Worker API → D1
+Dify Workflow (deterministic)
+  │  1. [HTTP] POST /api/sources/fetch-all    → Fetch bài từ tất cả sources
+  │  2. [HTTP] GET  /api/articles?unsummarized=1  → Lấy bài chưa tóm tắt
+  │  3. [Code] Parse JSON response             → Format cho LLM
+  │  4. [IF]   Has articles?                   → Kiểm tra có bài không
+  │  5. [LLM]  Summarize + Score + Digest      → AI tóm tắt (1 lần gọi duy nhất)
+  │  6. [Code] Parse LLM output                → Tạo payloads
+  │  7. [HTTP] POST /api/articles/summarize     → Lưu summaries
+  │  8. [HTTP] POST /api/digest                 → Lưu digest
   ▼
 Cloudflare Worker (Hono)
   ├── API routes    (/api/*)
@@ -22,12 +24,12 @@ Cloudflare Worker (Hono)
   └── Web Push      (VAPID, RFC 8291)
 ```
 
-> **Lưu ý:** Dự án hiện tại **không dùng** CF Queues hay AI Worker riêng. Toàn bộ AI processing do Dify agent đảm nhận qua API.
+> **Ưu điểm so với Agent**: Không tốn token AI cho reasoning/tool selection. AI chỉ chạy 1 lần để tóm tắt. Deterministic, không bị bỏ bước.
 
 ## Yêu cầu
 
 - Tài khoản [Dify](https://cloud.dify.ai) (Free plan)
-- OpenRouter API key đã thêm vào Dify (Model Provider)
+- Model provider đã thêm vào Dify (ví dụ: Google Gemini)
 - Worker API đã deploy: `https://newsdigest.trongnguyenchromeos.workers.dev`
 
 ---
@@ -35,451 +37,118 @@ Cloudflare Worker (Hono)
 ## Bước 1: Thêm Model Provider
 
 1. Vào Dify → **Settings** → **Model Provider**
-2. Click **+ Add Model Provider** → chọn **OpenRouter**
+2. Click **+ Add Model Provider** → chọn provider (Google Gemini, OpenRouter, etc.)
 3. Nhập API key → **Save**
 
 ---
 
-## Bước 2: Tạo Agent App
+## Bước 2: Import Workflow
 
-1. Vào **Studio** → **Create App** → chọn **Agent**
-2. Đặt tên: `NewsDigest Reader`
-3. Chọn model: gợi ý `google/gemini-2.0-flash` hoặc `meta-llama/llama-4-maverick`
-
----
-
-## Bước 3: Tạo Custom Tools
-
-Dify dùng **OpenAPI Schema** để định nghĩa custom tools. Bạn chỉ cần paste 1 schema JSON duy nhất, Dify sẽ tự parse ra 5 tools.
-
-1. Vào tab **Tools** → **Custom** → **Create Custom Tool**
-2. Đặt tên: `NewsDigest API`
-3. Paste schema sau vào ô **Schema**:
-
-```json
-{
-  "openapi": "3.0.0",
-  "info": {
-    "title": "NewsDigest API",
-    "version": "1.0.0",
-    "description": "API cho Dify agent đọc và xử lý tin tức"
-  },
-  "servers": [
-    {
-      "url": "https://newsdigest.trongnguyenchromeos.workers.dev"
-    }
-  ],
-  "paths": {
-    "/api/sources": {
-      "get": {
-        "operationId": "getSources",
-        "summary": "Lấy danh sách tất cả nguồn tin đã đăng ký",
-        "responses": {
-          "200": {
-            "description": "Danh sách sources",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "sources": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": { "type": "string" },
-                          "url": { "type": "string" },
-                          "name": { "type": "string" },
-                          "type": { "type": "string" },
-                          "enabled": { "type": "integer" },
-                          "group_name": { "type": "string" },
-                          "last_fetched_at": { "type": "string", "nullable": true }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sources/fetch-all": {
-      "post": {
-        "operationId": "fetchAllSources",
-        "summary": "Fetch bài mới từ TẤT CẢ nguồn tin đang enabled trong 1 lần gọi",
-        "responses": {
-          "200": {
-            "description": "Kết quả fetch tất cả sources",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": { "type": "boolean" },
-                    "total_fetched": { "type": "integer" },
-                    "total_inserted": { "type": "integer" },
-                    "results": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "source_id": { "type": "string" },
-                          "name": { "type": "string" },
-                          "fetched": { "type": "integer" },
-                          "inserted": { "type": "integer" }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/articles": {
-      "get": {
-        "operationId": "getUnsummarizedArticles",
-        "summary": "Lấy bài viết chưa được AI tóm tắt",
-        "parameters": [
-          {
-            "name": "unsummarized",
-            "in": "query",
-            "schema": { "type": "string", "default": "1" },
-            "description": "Set 1 để chỉ lấy bài chưa tóm tắt"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": { "type": "integer", "default": 30 },
-            "description": "Số bài tối đa trả về (max 50)"
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "schema": { "type": "integer", "default": 1 },
-            "description": "Trang"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Danh sách bài viết",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "articles": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": { "type": "string" },
-                          "title": { "type": "string" },
-                          "url": { "type": "string" },
-                          "full_text": { "type": "string" },
-                          "source_id": { "type": "string" },
-                          "published_at": { "type": "string" }
-                        }
-                      }
-                    },
-                    "total": { "type": "integer" },
-                    "page": { "type": "integer" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/articles/summarize": {
-      "post": {
-        "operationId": "saveSummaries",
-        "summary": "Gửi kết quả tóm tắt AI về Worker lưu vào D1",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["results"],
-                "properties": {
-                  "results": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "required": ["id", "summary"],
-                      "properties": {
-                        "id": { "type": "string", "description": "Article ID" },
-                        "summary": { "type": "string", "description": "Tóm tắt 2-3 câu" },
-                        "hot_score": { "type": "integer", "description": "Điểm 1-10", "minimum": 1, "maximum": 10 },
-                        "tags": {
-                          "type": "array",
-                          "items": { "type": "string" },
-                          "description": "Tags: AI, Tech, Security, Business, Vietnam, World, Dev, Science, Crypto, Policy, Entertainment"
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": { "type": "boolean" },
-                    "updated": { "type": "integer" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/digest": {
-      "post": {
-        "operationId": "saveDigest",
-        "summary": "Lưu bài tổng hợp digest vào D1",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["summary_text"],
-                "properties": {
-                  "summary_text": { "type": "string", "description": "Đoạn tổng hợp 3-5 câu" },
-                  "top_article_ids": {
-                    "type": "array",
-                    "items": { "type": "string" },
-                    "description": "Danh sách article IDs nổi bật"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": { "type": "boolean" },
-                    "digestId": { "type": "string" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-4. Dify sẽ parse ra 5 tools trong bảng **Available Tools**:
-   - `getSources` — GET danh sách nguồn tin
-   - `fetchAllSources` — POST fetch bài từ **tất cả** sources (1 lần gọi)
-   - `getUnsummarizedArticles` — GET bài chưa tóm tắt
-   - `saveSummaries` — POST kết quả AI tóm tắt
-   - `saveDigest` — POST digest tổng hợp
-5. Authorization method: **None** (Worker đã có CORS, không cần auth)
-6. Click **Save**
+1. Vào **Studio** → **Create App** → chọn **Import DSL**
+2. Upload file `Daily AI News Digest.yml` từ root dự án
+3. Dify sẽ tạo workflow với đầy đủ nodes
 
 ---
 
-## Bước 4: Tạo Workflow
+## Bước 3: Kiểm tra Workflow
 
-> **Tại sao Workflow?** Agent node yêu cầu model tự quyết định gọi tool nào → dễ bị dừng giữa chừng. Workflow chia từng bước thành node riêng biệt, đáng tin cậy hơn nhiều.
+Sau khi import, verify các node:
 
-Vào **Studio** → **Create App** → chọn **Workflow** → đặt tên `NewsDigest Pipeline`.
-
-### Sơ đồ Workflow (2-pass)
+### Sơ đồ Workflow
 
 ```
 Start
   │
   ▼
-[HTTP] fetch_all ──── POST /api/sources/fetch-all
+[HTTP] Fetch All Sources ── POST /api/sources/fetch-all
   │
   ▼
-[HTTP] get_titles ─── GET /api/articles?unsummarized=1&compact=1&limit=50
-  │                   (chỉ trả id, title, url — KHÔNG full_text)
-  ▼
-[LLM] screen ──────── Scan tiêu đề, chọn bài hay → trả về danh sách IDs
+[HTTP] Get Unsummarized ─── GET /api/articles?unsummarized=1&limit=30
   │
   ▼
-[Code] extract_ids ── Parse JSON → tạo chuỗi ids
+[Code] Parse Articles ───── Parse JSON, format text cho LLM, đếm bài
   │
   ▼
-[HTTP] enrich ─────── POST /api/articles/enrich {ids: [...]}
-  │                   (fetch nội dung bài gốc từ URL)
-  ▼
-[HTTP] get_full ───── GET /api/articles?ids={{ids}}
-  ▼
-[LLM] summarize ───── Tóm tắt + chấm điểm + gắn tags
+[IF] Has Articles? ──────── article_count > 0 ?
+  │           │
+  │(Yes)      │(No)
+  ▼           ▼
+[LLM]       End
+Summarize
   │
   ▼
-[HTTP] save_summaries ── POST /api/articles/summarize
+[Code] Parse LLM Output ── Trích JSON, tạo payloads
   │
   ▼
-[LLM] write_digest ──── Viết digest tổng hợp
+[HTTP] Save Summaries ───── POST /api/articles/summarize
   │
   ▼
-[HTTP] save_digest ───── POST /api/digest
+[HTTP] Save Digest ──────── POST /api/digest
   │
   ▼
 End
 ```
 
-> **Ưu điểm 2-pass**: Pass 1 gửi ~50 tiêu đề (rất nhẹ) cho LLM lọc. Pass 2 chỉ gửi full_text ~10-15 bài hay → tiết kiệm 70-80% token.
-
 ---
 
-### Node 1: `fetch_all` (HTTP Request)
+### Node 1: `Fetch All Sources` (HTTP Request)
 
 - **Method**: POST
 - **URL**: `https://newsdigest.trongnguyenchromeos.workers.dev/api/sources/fetch-all`
+- **Body**: none
+- **Timeout read**: 120s (fetch nhiều sources có thể chậm)
 
-### Node 2: `get_titles` (HTTP Request)
-
-- **Method**: GET
-- **URL**: `https://newsdigest.trongnguyenchromeos.workers.dev/api/articles?unsummarized=1&compact=1&limit=50`
-
-> `compact=1` chỉ trả về `id, title, url, source_id, published_at` — không có `full_text`.
-
-### Node 3: `screen` (LLM)
-
-- **Model**: model rẻ nhất có thể (ví dụ `gemini-2.0-flash`)
-- **Input variable**: `titles` ← output body của node `get_titles`
-- **System Prompt**:
-
-```
-Bạn là biên tập viên. Đọc danh sách tiêu đề bài viết và chọn những bài ĐÁNG ĐỌC SÂU.
-
-Tiêu chí chọn:
-- Tin quan trọng, có giá trị thông tin cao
-- Công nghệ mới, AI breakthrough, security issue
-- Sự kiện lớn, trending
-- Bỏ qua bài spam, quảng cáo, click-bait, trùng lặp
-
-Trả về ĐÚNG JSON format (không thêm gì khác):
-{"selected_ids": ["id1", "id2", "id3"]}
-
-Chọn tối đa 15 bài hay nhất.
-```
-
-- **User Prompt**: `{{titles}}`
-
-### Node 4: `extract_ids` (Code)
-
-- **Language**: Python
-- **Input**: `screen_output` ← output text từ node `screen`
-- **Code**:
-
-```python
-import json
-
-def main(screen_output: str) -> dict:
-    try:
-        data = json.loads(screen_output)
-        ids = data.get("selected_ids", [])
-        return {
-            "ids": ",".join(ids),
-            "ids_json": json.dumps(ids)
-        }
-    except:
-        return {"ids": "", "ids_json": "[]"}
-```
-
-- **Output**: `ids` (comma-separated cho GET), `ids_json` (JSON array cho POST enrich)
-
-### Node 5: `enrich` (HTTP Request)
-
-- **Method**: POST
-- **URL**: `https://newsdigest.trongnguyenchromeos.workers.dev/api/articles/enrich`
-- **Headers**: `Content-Type: application/json`
-- **Body**: `{"ids": {{ids_json}}}`
-
-> Endpoint này fetch nội dung bài gốc từ URL và update `full_text` vào DB. Fetch song song 5 bài cùng lúc, timeout 8s/bài.
-
-### Node 6: `get_full` (HTTP Request)
+### Node 2: `Get Unsummarized Articles` (HTTP Request)
 
 - **Method**: GET
-- **URL**: `https://newsdigest.trongnguyenchromeos.workers.dev/api/articles?ids={{ids}}`
+- **URL**: `https://newsdigest.trongnguyenchromeos.workers.dev/api/articles?unsummarized=1&limit=30`
 
-> Giờ articles đã có `full_text` đầy đủ nhờ bước enrich.
+### Node 3: `Parse Articles` (Code - Python)
 
-### Node 7: `summarize` (LLM)
+- **Input**: `body` ← response body từ node Get Unsummarized
+- **Output**: `articles_text` (string), `article_count` (number)
+- **Logic**: Parse JSON, format mỗi bài thành `ID / Title / Content` (giới hạn 2000 ký tự/bài)
 
-- **Model**: `gemini-2.0-flash` hoặc tương đương
-- **Input variable**: `articles` ← output body của node `get_full`
-- **System Prompt**:
+### Node 4: `Has Articles?` (IF-ELSE)
 
-```
-Đọc full_text từng bài viết và tóm tắt. Với MỖI bài, trả về:
-- id: giữ nguyên article id
-- summary: tóm tắt 2-3 câu bằng tiếng Việt
-- hot_score: 1-10 (10=viral, 7-8=hay, 5-6=bình thường, 1-3=nhàm/spam)
-- tags: tối đa 3 từ: AI, Tech, Security, Business, Vietnam, World, Dev, Science, Crypto, Policy, Entertainment
+- **Condition**: `article_count` > 0
+- **True** → tiếp tục LLM
+- **False** → End (không có bài mới)
 
-Giữ nguyên thuật ngữ kỹ thuật. Nếu bài tiếng Anh, dịch tóm tắt sang tiếng Việt.
+### Node 5: `AI Summarize & Score` (LLM)
 
-Trả về ĐÚNG JSON format:
-{"results": [{"id": "...", "summary": "...", "hot_score": 7, "tags": ["Tech", "AI"]}]}
-```
+- **Model**: `gemini-3-flash-preview` (hoặc model tương đương)
+- **Nhiệm vụ**: Trong 1 lần gọi duy nhất:
+  1. Tóm tắt mỗi bài (tiếng Việt, 2-3 câu)
+  2. Chấm `hot_score` (1-10)
+  3. Gắn tags (tối đa 3)
+  4. Viết digest 3-5 câu xu hướng nổi bật
+  5. Chọn 3-5 bài hot nhất
+- **Output**: JSON có cấu trúc `{ summaries, digest_text, top_article_ids }`
 
-- **User Prompt**: `{{articles}}`
+### Node 6: `Parse LLM Output` (Code - Python)
 
-### Node 7: `save_summaries` (HTTP Request)
+- **Input**: `llm_output` ← text từ LLM node
+- **Output**: `summaries_payload` (JSON string), `digest_payload` (JSON string)
+- **Logic**: Trích JSON từ markdown code block, build 2 payload cho 2 HTTP request tiếp theo
+
+### Node 7: `Save Summaries` (HTTP Request)
 
 - **Method**: POST
 - **URL**: `https://newsdigest.trongnguyenchromeos.workers.dev/api/articles/summarize`
 - **Headers**: `Content-Type: application/json`
-- **Body**: output text từ node `summarize`
+- **Body**: raw-text → `{{#parse_output.summaries_payload#}}`
 
-### Node 8: `write_digest` (LLM)
-
-- **Input variable**: `summaries` ← output từ node `summarize`
-- **System Prompt**:
-
-```
-Dựa trên kết quả tóm tắt, viết 1 đoạn digest 3-5 câu bằng tiếng Việt. Nêu xu hướng nổi bật nhất.
-
-Trả về JSON format:
-{"summary_text": "...", "top_article_ids": ["id1", "id2", "id3"]}
-
-Chọn 3-5 bài có hot_score cao nhất làm top_article_ids.
-```
-
-- **User Prompt**: `{{summaries}}`
-
-### Node 9: `save_digest` (HTTP Request)
+### Node 8: `Save Digest` (HTTP Request)
 
 - **Method**: POST
 - **URL**: `https://newsdigest.trongnguyenchromeos.workers.dev/api/digest`
 - **Headers**: `Content-Type: application/json`
-- **Body**: output text từ node `write_digest`
+- **Body**: raw-text → `{{#parse_output.digest_payload#}}`
 
 ---
 
-## Bước 5: Chạy Workflow
+## Bước 4: Chạy Workflow
 
 ### Chạy thủ công
 
@@ -489,22 +158,34 @@ Click **Run** (▶) ở góc trên phải.
 
 1. Thêm **Trigger** node loại **Schedule**
 2. Set cron: mỗi 3-6 giờ
-3. Nối trigger → node `fetch_all`
+3. Nối trigger → node `Fetch All Sources`
 
 ---
 
-## Bước 6: Test
+## Bước 5: Test
 
 1. Click **Run** trên Workflow
 2. Kiểm tra từng node:
-   - `fetch_all` → `{ ok: true, total_fetched: N }`
-   - `get_titles` → danh sách bài chỉ có title (compact)
-   - `screen` → `{ selected_ids: ["...", "..."] }`
-   - `get_full` → full_text các bài đã chọn
-   - `summarize` → JSON results
-   - `save_summaries` → `{ ok: true, updated: N }`
-   - `write_digest` → JSON digest
-   - `save_digest` → `{ ok: true, digestId: "..." }`
+   - `Fetch All Sources` → `{ ok: true, total_fetched: N }`
+   - `Get Unsummarized` → `{ articles: [...], total: N }`
+   - `Parse Articles` → `article_count > 0`, `articles_text` có nội dung
+   - `Has Articles?` → đi nhánh True
+   - `AI Summarize & Score` → JSON output hợp lệ
+   - `Parse LLM Output` → 2 payload JSON
+   - `Save Summaries` → `{ ok: true, updated: N }`
+   - `Save Digest` → `{ ok: true, digestId: "..." }`
+
+---
+
+## So sánh: Workflow mới vs Agent cũ
+
+| | Agent cũ | Workflow mới |
+|---|---------|-------------|
+| AI calls | 6+ (ReAct reasoning cho mỗi tool) | **1** (chỉ summarize) |
+| Token tiêu thụ | Rất nhiều | Tiết kiệm 70-80% |
+| Độ tin cậy | Agent có thể bỏ bước / sai thứ tự | Deterministic |
+| Error handling | Agent tự xử lý (unreliable) | IF-ELSE + Code fallback |
+| Max iterations | Cần 15 | Không cần |
 
 ---
 
@@ -517,10 +198,12 @@ Click **Run** (▶) ở góc trên phải.
 | `/api/sources/:id` | PATCH | Cập nhật nguồn `{ enabled?, name?, group_name? }` |
 | `/api/sources/:id` | DELETE | Xóa nguồn |
 | `/api/sources/:id/fetch` | POST | Fetch bài từ nguồn (gọi scraper) |
-| `/api/articles` | GET | Bài viết (filter: `tag`, `source_id`, `min_hot`, `sort`, `bookmarked`, `unsummarized`, `page`, `limit`) |
+| `/api/sources/fetch-all` | POST | Fetch bài từ tất cả sources enabled |
+| `/api/articles` | GET | Bài viết (filter: `tag`, `source_id`, `min_hot`, `sort`, `bookmarked`, `unsummarized`, `compact`, `ids`, `page`, `limit`) |
 | `/api/articles/:id` | GET | Chi tiết 1 bài |
 | `/api/articles/:id/bookmark` | PATCH | Bookmark `{ bookmarked: true/false }` |
 | `/api/articles/:id/read` | PATCH | Đánh dấu đã đọc |
+| `/api/articles/enrich` | POST | Fetch nội dung bài gốc `{ ids: [...], force? }` |
 | `/api/articles/summarize` | POST | Gửi kết quả AI tóm tắt (Dify → Worker) |
 | `/api/digest` | POST | Tạo digest mới |
 | `/api/digest/latest` | GET | Digest mới nhất + top articles |
@@ -557,7 +240,7 @@ worker/
 
 ### Cron
 
-Worker cron chạy **mỗi 3 giờ** (`0 */3 * * *`), round-robin fetch 1 source mỗi lần. Chỉ fetch và insert bài, **không tự summarize** — phần AI do Dify agent xử lý.
+Worker cron chạy **mỗi 3 giờ** (`0 */3 * * *`), round-robin fetch 1 source mỗi lần. Chỉ fetch và insert bài, **không tự summarize** — phần AI do Dify workflow xử lý.
 
 ---
 
@@ -575,8 +258,9 @@ Worker cron chạy **mỗi 3 giờ** (`0 */3 * * *`), round-robin fetch 1 source
 
 ## Troubleshooting
 
-- **Agent không gọi được API**: Kiểm tra URL trong tool config. Worker đã có CORS middleware.
+- **HTTP node lỗi kết nối**: Kiểm tra URL trong node config. Worker đã có CORS middleware.
 - **Không có bài mới**: Cần thêm sources trước (qua frontend hoặc `POST /api/sources`).
-- **Tóm tắt bị sai ngôn ngữ**: Đảm bảo system prompt yêu cầu "tóm tắt bằng tiếng Việt".
+- **LLM output parse lỗi**: Code node có fallback tìm JSON trong markdown code block. Kiểm tra LLM system prompt yêu cầu output JSON.
+- **Tóm tắt bị sai ngôn ngữ**: Đảm bảo LLM system prompt yêu cầu "tóm tắt bằng tiếng Việt".
 - **YouTube không fetch được**: Cần set `YOUTUBE_API_KEY` qua `wrangler secret put YOUTUBE_API_KEY`.
 - **Push notification không gửi**: Cần set VAPID keys qua `wrangler secret put VAPID_PUBLIC_KEY` và `VAPID_PRIVATE_KEY`.
