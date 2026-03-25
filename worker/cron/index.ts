@@ -26,6 +26,7 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
   let totalInserted = 0;
   let totalEnqueued = 0;
   let totalErrors = 0;
+  let redditDelayCounter = 0;
 
   // Xử lý từng batch
   for (let i = 0; i < sources.length; i += BATCH_SIZE) {
@@ -52,15 +53,26 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
 
           if (result.meta && result.meta.changes > 0) {
             insertedCount++;
-            newArticles.push({ articleId: idValue, url: article.url });
+            newArticles.push({ articleId: idValue, url: article.url, title: article.title });
           }
         }
 
         // Enqueue new articles for content scraping
         if (newArticles.length > 0) {
-          await env.CONTENT_QUEUE.sendBatch(
-            newArticles.map(a => ({ body: a }))
-          );
+          const normalArticles = newArticles.filter(a => !a.url.includes('reddit.com'));
+          const redditArticles = newArticles.filter(a => a.url.includes('reddit.com'));
+
+          if (normalArticles.length > 0) {
+            await env.CONTENT_QUEUE.sendBatch(
+              normalArticles.map(a => ({ body: a }))
+            );
+          }
+
+          // Stagger Reddit articles with 7 seconds delay (100 req/10 mins limit)
+          for (const a of redditArticles) {
+            await env.CONTENT_QUEUE.send(a, { delaySeconds: redditDelayCounter * 7 });
+            redditDelayCounter++;
+          }
         }
 
         // Cập nhật last_fetched_at

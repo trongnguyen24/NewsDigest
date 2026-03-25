@@ -199,24 +199,46 @@ app.post('/api/articles/enqueue-scrape', async (c) => {
 
     const condition = force ? '1=1' : 'content IS NULL';
     const { results } = await c.env.DB.prepare(
-        `SELECT id, url FROM articles WHERE ${condition} ORDER BY fetched_at DESC LIMIT ?`
-    ).bind(limit).all<{ id: string; url: string }>();
+        `SELECT id, url, title FROM articles WHERE ${condition} ORDER BY fetched_at DESC LIMIT ?`
+    ).bind(limit).all<{ id: string; url: string; title: string }>();
 
     if (!results || results.length === 0) {
         return c.json({ ok: true, enqueued: 0, message: 'No articles to scrape' });
     }
 
-    // Enqueue in batches of 25 (Queue limit per sendBatch)
+    const normalArticles = results.filter(a => !a.url.includes('reddit.com'));
+    const redditArticles = results.filter(a => a.url.includes('reddit.com'));
+
+    // Enqueue normal articles in batches of 25 (Queue limit per sendBatch)
     let enqueued = 0;
-    for (let i = 0; i < results.length; i += 25) {
-        const batch = results.slice(i, i + 25);
+    for (let i = 0; i < normalArticles.length; i += 25) {
+        const batch = normalArticles.slice(i, i + 25);
         await c.env.CONTENT_QUEUE.sendBatch(
-            batch.map(a => ({ body: { articleId: a.id, url: a.url } }))
+            batch.map(a => ({ body: { articleId: a.id, url: a.url, title: a.title } }))
         );
         enqueued += batch.length;
     }
 
+    // Enqueue Reddit articles with 7 seconds delay between each (100 req/10 mins limit)
+    for (let i = 0; i < redditArticles.length; i++) {
+        await c.env.CONTENT_QUEUE.send(
+            { articleId: redditArticles[i].id, url: redditArticles[i].url, title: redditArticles[i].title },
+            { delaySeconds: i * 7 }
+        );
+        enqueued++;
+    }
+
     return c.json({ ok: true, enqueued, message: `Enqueued ${enqueued} articles for content scraping` });
+});
+
+/**
+ * POST /api/digest/generate
+ * Manual trigger digest generation.
+ */
+app.post('/api/digest/generate', async (c) => {
+    const { scheduledDigest } = await import('../cron/digest');
+    await scheduledDigest(c.env);
+    return c.json({ ok: true, message: 'Digest generation triggered' });
 });
 
 // ── Dify Integration ─────────────────────────────────────

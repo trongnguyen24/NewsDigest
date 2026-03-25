@@ -19,24 +19,29 @@ export async function fetchSource(source: Source, env: Env): Promise<ArticleInpu
 }
 
 async function fetchReddit(source: Source): Promise<ArticleInput[]> {
-  const url = source.url.endsWith('/') ? `${source.url}new.json?limit=25` : `${source.url}/new.json?limit=25`;
+  const url = source.url.endsWith('/') ? `${source.url}hot.json?limit=25` : `${source.url}/hot.json?limit=25`;
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'NewsDigest/1.0.0' }
+    headers: { 'User-Agent': 'NewsDigest/1.0 (news aggregation bot)' }
   });
   if (!response.ok) throw new Error(`Reddit API failed: ${response.status}`);
   
   const data: any = await response.json();
   const children = data?.data?.children || [];
   
-  return children.map((item: any) => {
-    const d = item.data;
-    return {
-      url: `https://www.reddit.com${d.permalink}`,
-      title: d.title,
-      description: d.selftext || '',
-      published_at: new Date(d.created_utc * 1000).toISOString()
-    };
-  });
+  return children
+    .filter((item: any) => !item.data.stickied) // Skip pinned posts
+    .map((item: any) => {
+      const d = item.data;
+      const meta = `⬆${d.score} 💬${d.num_comments} r/${d.subreddit}`;
+      return {
+        url: `https://www.reddit.com${d.permalink}`,
+        title: d.title,
+        description: d.selftext
+          ? `${meta}\n${d.selftext.slice(0, 300)}`
+          : meta,
+        published_at: new Date(d.created_utc * 1000).toISOString()
+      };
+    });
 }
 
 async function fetchYouTube(source: Source, apiKey: string): Promise<ArticleInput[]> {

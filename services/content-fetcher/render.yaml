@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: newsdigest-content-fetcher
+    runtime: docker
+    plan: free
+    envVars:
+      - key: API_KEY
+        generateValue: true
+      - key: YOUTUBE_COOKIES
+        sync: false  # Paste Netscape-format cookies.txt content here

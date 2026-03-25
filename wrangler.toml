@@ -20,7 +20,7 @@ id = "167e614538534561a3db962c1f625b74"
 preview_id = "167e614538534561a3db962c1f625b74"
 
 [triggers]
-crons = ["0 */3 * * *"]  # Mỗi 3 giờ
+crons = ["0 */3 * * *", "0 1,13 * * *"]  # Scrape mỗi 3h + Digest 8h&20h VN
 
 [[queues.producers]]
 queue = "article-content-queue"
@@ -28,11 +28,13 @@ binding = "CONTENT_QUEUE"
 
 [[queues.consumers]]
 queue = "article-content-queue"
-max_batch_size = 5
-max_batch_timeout = 30
-max_retries = 2
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 3
 dead_letter_queue = "article-content-dlq"
 
 [vars]
 VAPID_PUBLIC_KEY = ""
 VAPID_PRIVATE_KEY = ""
+CONTENT_SERVICE_URL = "https://newsdigest-content-fetcher.onrender.com"
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/4ade94c28880b53876bf8cd0c604e426/newsdigest/google-ai-studio"
