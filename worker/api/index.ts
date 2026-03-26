@@ -51,6 +51,12 @@ app.get('/api/articles', async (c) => {
 
     if (unsummarized === '1') { where += ' AND summary IS NULL'; }
 
+    // Date range filter (ISO 8601 UTC strings — index-friendly)
+    const from = c.req.query('from');
+    const to = c.req.query('to');
+    if (from) { where += ' AND published_at >= ?'; binds.push(from); }
+    if (to)   { where += ' AND published_at < ?';  binds.push(to); }
+
     const countStmt = c.env.DB.prepare(`SELECT COUNT(*) as total FROM articles ${where}`);
     const dataStmt = c.env.DB.prepare(
         `SELECT ${fields} FROM articles ${where} ORDER BY ${sort} LIMIT ? OFFSET ?`
