@@ -64,7 +64,7 @@
 </script>
 
 <div
-  class="min-h-screen bg-[#F8F7F2] dark:bg-zinc-950 font-sans text-zinc-900 dark:text-zinc-100 selection:bg-zinc-200 dark:selection:bg-zinc-800"
+  class="min-h-screen bg-[#f0eee6] dark:bg-zinc-950 font-sans text-zinc-900 dark:text-zinc-100 selection:bg-zinc-200 dark:selection:bg-zinc-800"
 >
   {@render children()}
 </div>

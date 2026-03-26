@@ -242,6 +242,70 @@ app.post('/api/digest/generate', async (c) => {
     return c.json({ ok: true, message: 'Digest generation triggered' });
 });
 
+/**
+ * POST /api/articles/resummarize
+ * Retry AI summarization cho các bài đã có content nhưng chưa có summary
+ * (do Gemini bị overload/rate-limit lúc scrape).
+ * Body (optional): { limit?: number, delayMs?: number }
+ * - limit: số bài tối đa (default 20, max 100)
+ * - delayMs: delay giữa mỗi lần gọi Gemini (default 3000ms)
+ */
+app.post('/api/articles/resummarize', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const limit = Math.min(body.limit || 20, 100);
+    const delayMs = Math.max(body.delayMs || 3000, 1000);
+
+    const { results } = await c.env.DB.prepare(
+        `SELECT id, title, content FROM articles
+         WHERE content IS NOT NULL AND content != '' AND summary IS NULL
+         ORDER BY fetched_at DESC LIMIT ?`
+    ).bind(limit).all<{ id: string; title: string; content: string }>();
+
+    if (!results || results.length === 0) {
+        return c.json({ ok: true, summarized: 0, failed: 0, total: 0, message: 'No unsummarized articles with content found' });
+    }
+
+    const { summarizeArticle } = await import('../ai/summarizer');
+    const summaryResults: { id: string; title: string; success: boolean; error?: string }[] = [];
+    let summarized = 0;
+    let failed = 0;
+
+    for (let i = 0; i < results.length; i++) {
+        const art = results[i];
+        try {
+            const aiResult = await summarizeArticle(art.title || '', art.content, c.env);
+            if (aiResult) {
+                await c.env.DB.prepare(
+                    'UPDATE articles SET description_vn = ?, summary = ?, hot_score = ?, tags = ? WHERE id = ?'
+                ).bind(aiResult.description_vn, aiResult.summary, aiResult.hot_score, JSON.stringify(aiResult.tags), art.id).run();
+                summarized++;
+                summaryResults.push({ id: art.id, title: art.title, success: true });
+                console.log(`🔄 Resummarized [${i + 1}/${results.length}]: "${art.title}" → score=${aiResult.hot_score}`);
+            } else {
+                failed++;
+                summaryResults.push({ id: art.id, title: art.title, success: false, error: 'AI returned null' });
+            }
+        } catch (err: any) {
+            failed++;
+            summaryResults.push({ id: art.id, title: art.title, success: false, error: err.message });
+            console.log(`⚠️ Resummarize failed [${i + 1}/${results.length}]: "${art.title}" — ${err.message}`);
+            // Nếu 429, tăng delay lên gấp đôi cho các bài còn lại
+            if (err.message?.includes('429')) {
+                console.log(`⏳ Rate limited — doubling delay for remaining articles`);
+                await new Promise(r => setTimeout(r, delayMs * 2));
+                continue;
+            }
+        }
+
+        // Delay giữa mỗi lần gọi (trừ bài cuối)
+        if (i < results.length - 1) {
+            await new Promise(r => setTimeout(r, delayMs));
+        }
+    }
+
+    return c.json({ ok: true, summarized, failed, total: results.length, results: summaryResults });
+});
+
 // ── Dify Integration ─────────────────────────────────────
 
 /**

@@ -14,12 +14,5 @@ export default defineConfig({
 			manifest: false // we will supply our own static/manifest.webmanifest
 		})
 	],
-	server: {
-		proxy: {
-			'/api': {
-				target: 'http://localhost:8787',
-				changeOrigin: true
-			}
-		}
-	}
+
 });
