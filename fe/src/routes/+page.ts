@@ -1,5 +1,5 @@
 import { api } from '$lib/api';
-import type { Article } from '$lib/types';
+import type { Article, Digest } from '$lib/types';
 
 // Override layout's prerender — this page is dynamic (date-based)
 export const prerender = false;
@@ -17,11 +17,23 @@ export async function load({ fetch, url }) {
   const to = dayEnd.toISOString();
 
   try {
-    const res = await fetch(api(`/api/articles?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200&sort=date`));
-    const data = await res.json();
-    return { articles: (data.articles ?? []) as Article[], error: false, currentDate: localDate };
+    // Fetch articles and digest in parallel
+    const [articlesRes, digestRes] = await Promise.all([
+      fetch(api(`/api/articles?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200&sort=date`)),
+      fetch(api(`/api/digest?date=${localDate}`))
+    ]);
+
+    const articlesData = await articlesRes.json();
+    const digestData = await digestRes.json();
+
+    return {
+      articles: (articlesData.articles ?? []) as Article[],
+      digest: (digestData.digest ?? null) as Digest | null,
+      error: false,
+      currentDate: localDate
+    };
   } catch (e) {
-    console.error('Failed to fetch articles', e);
-    return { articles: [] as Article[], error: true, currentDate: localDate };
+    console.error('Failed to fetch data', e);
+    return { articles: [] as Article[], digest: null as Digest | null, error: true, currentDate: localDate };
   }
 }

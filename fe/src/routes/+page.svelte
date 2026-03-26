@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { filters } from '$lib/stores/articles';
   import ArticleCard from '$lib/components/app/ArticleCard.svelte';
+  import DigestBlock from '$lib/components/app/DigestBlock.svelte';
   import { Button } from '$lib/components/ui/button';
   import { Badge } from '$lib/components/ui/badge';
   import { ChevronLeft, ChevronRight } from 'lucide-svelte';
@@ -128,6 +129,11 @@
     <div class="w-[100px] sm:w-[110px]"></div>
   {/if}
 </div>
+
+<!-- Digest block (ngay dưới date navigator) -->
+{#if data.digest}
+  <DigestBlock digest={data.digest} articles={data.articles} />
+{/if}
 
 <!-- Tag filter bar -->
 <div class="flex gap-2 flex-wrap mb-6">

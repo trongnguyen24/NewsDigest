@@ -2,7 +2,7 @@ import { Env, ContentScrapeMessage } from '../types';
 import { extractArticleContent } from '../cron/scraper';
 import { summarizeArticle } from '../ai/summarizer';
 
-const MAX_CHARS = 5000;
+const MAX_CHARS = 25000;
 
 /**
  * Extract YouTube video ID from URL

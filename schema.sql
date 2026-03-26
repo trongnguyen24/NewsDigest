@@ -26,6 +26,7 @@ CREATE TABLE articles (
   title       TEXT NOT NULL,
   summary     TEXT,                     -- tóm tắt AI (nullable, điền sau)
   description TEXT,                     -- mô tả ngắn từ RSS/API
+  description_vn TEXT,                  -- mô tả tiếng Việt do AI sinh
   content     TEXT,                     -- nội dung đầy đủ được cào (optional)
   hot_score   INTEGER,                  -- 1–10, do AI chấm
   tags        TEXT,                     -- JSON array: ["AI", "Security"]
@@ -34,16 +35,17 @@ CREATE TABLE articles (
   UNIQUE(source_id, url)               -- dedup theo source + url
 );
 
--- Digest report được tạo mỗi giờ
+-- Digest tổng hợp theo ngày (mỗi ngày 1 digest, cập nhật liên tục)
 CREATE TABLE digests (
   id          TEXT PRIMARY KEY,
+  digest_date TEXT NOT NULL UNIQUE,     -- YYYY-MM-DD, mỗi ngày 1 digest
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  period_start TEXT NOT NULL,           -- giờ bắt đầu kỳ fetch
-  period_end   TEXT NOT NULL,
-  summary_text TEXT NOT NULL,           -- tổng hợp AI viết
-  top_article_ids TEXT NOT NULL,        -- JSON array of article IDs
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  summary_text TEXT NOT NULL,           -- tổng hợp AI viết, chứa inline <id:uuid>
   total_fetched INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE INDEX idx_digests_date ON digests(digest_date);
 
 -- Index để query nhanh
 CREATE INDEX idx_articles_source    ON articles(source_id);

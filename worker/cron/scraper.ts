@@ -187,7 +187,7 @@ async function fetchUnknown(source: Source): Promise<ArticleInput[]> {
  * Dùng HTMLRewriter + SiteProfile để extract text chính xác theo từng site.
  * contentSelectors dùng để scope vùng content (chỉ lấy text bên trong).
  * removeSelectors dùng để xoá noise trước khi extract.
- * Giới hạn 5000 ký tự.
+ * Giới hạn 25000 ký tự.
  */
 export async function extractArticleContent(url: string): Promise<string> {
   try {
@@ -211,7 +211,7 @@ export async function extractArticleContent(url: string): Promise<string> {
     const paragraphs: string[] = [];
     let currentParagraph = '';
     let totalLen = 0;
-    const MAX_CHARS = 5000;
+    const MAX_CHARS = 25000;
 
     // Track whether we're inside a content container
     // depth > 0 means we're inside at least one matching content selector

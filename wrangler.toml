@@ -20,7 +20,7 @@ id = "167e614538534561a3db962c1f625b74"
 preview_id = "167e614538534561a3db962c1f625b74"
 
 [triggers]
-crons = ["0 */3 * * *", "0 1,13 * * *"]  # Scrape mỗi 3h + Digest 8h&20h VN
+crons = ["0 */3 * * *"]  # Scrape + Digest mỗi 3h
 
 [[queues.producers]]
 queue = "article-content-queue"

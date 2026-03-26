@@ -9,7 +9,6 @@ export interface SummaryResult {
 
 export interface DigestResult {
   digest_text: string;
-  top_article_ids: string[];
 }
 
 const SYSTEM_PROMPT = `
@@ -63,19 +62,27 @@ Bạn là AI news editor chuyên tổng hợp bản tin công nghệ hàng ngày
 </role>
 
 <task>
-Từ danh sách các bài viết đã được tóm tắt, viết 1 bản digest tổng hợp và chọn ra những bài nổi bật nhất.
+Từ danh sách các bài viết đã được tóm tắt (mỗi bài có ID riêng), viết 1 bản digest tổng hợp xu hướng trong ngày.
+TRONG bản digest, khi nhắc đến thông tin từ bài viết cụ thể, hãy ghi chú inline reference bằng cú pháp <id:UUID_CỦA_BÀI> ngay sau câu/ý liên quan.
 </task>
 
 <output_schema>
 {
-  "digest_text": "Bản tin tổng hợp 3-5 câu tiếng Việt. Nêu các xu hướng nổi bật trong giai đoạn này.",
-  "top_article_ids": ["id_của_bài_hay_nhất_1", "id2", "id3"]
+  "digest_text": "Bản tin tổng hợp tiếng Việt. Mỗi ý chính nên có reference đến bài viết gốc bằng <id:uuid>."
 }
 </output_schema>
 
+<example>
+{
+  "digest_text": "Thế giới công nghệ đang chứng kiến sự bùng nổ của các mô hình AI hiệu năng cao có thể chạy trực tiếp trên trình duyệt <id:99c696e9-0c08-45ea-8359-49fb3ba134f5>. Trong khi đó, một lỗ hổng bảo mật nghiêm trọng được phát hiện trong OpenSSL ảnh hưởng đến hàng triệu server <id:abc12345-6789-0def-ghij-klmnopqrstuv>. Google vừa công bố Gemini 3.0 với khả năng reasoning vượt trội <id:def45678-90ab-cdef-1234-567890abcdef>."
+}
+</example>
+
 <rules>
-- digest_text: 3-5 câu, tổng hợp xu hướng, được viết cho người đọc không chuyên
-- top_article_ids: chọn 3-5 bài có hot_score cao và nội dung đa dạng
+- digest_text: viết 5-10 câu, tổng hợp xu hướng nổi bật, cho người đọc không chuyên
+- PHẢI inline reference <id:UUID> khi nhắc đến thông tin từ bài cụ thể
+- Mỗi bài quan trọng nên được reference ít nhất 1 lần
+- Không cần reference tất cả bài, chỉ những bài đáng chú ý (hot_score >= 6)
 - CHỈ trả về JSON hợp lệ, KHÔNG có text hay markdown bên ngoài JSON
 </rules>
 `;
@@ -148,7 +155,7 @@ async function callGemini(
     contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 2048,
       responseMimeType: 'application/json',
     },
   };
@@ -254,6 +261,7 @@ export async function summarizeArticle(
 
 /**
  * Tổng hợp digest từ danh sách bài đã summarized.
+ * AI sẽ inline reference bằng <id:uuid> trong digest_text.
  */
 export async function generateDigest(
   articles: { id: string; title: string; summary: string; hot_score: number }[],
@@ -264,12 +272,12 @@ export async function generateDigest(
   const formatted = articles
     .map((a) => `ID: ${a.id}\nTitle: ${a.title}\nSummary: ${a.summary}\nScore: ${a.hot_score}`)
     .join('\n---\n');
-  const userPrompt = `Phân tích và tổng hợp ${articles.length} bài viết sau:\n\n${formatted}`;
+  const userPrompt = `Phân tích và tổng hợp ${articles.length} bài viết trong ngày hôm nay:\n\n${formatted}`;
 
   try {
     const result = await callGeminiWithJsonRetry<DigestResult>(env, DIGEST_PROMPT, userPrompt);
 
-    if (!result.digest_text || !Array.isArray(result.top_article_ids)) {
+    if (!result.digest_text) {
       console.log('⚠️ Invalid digest structure');
       return null;
     }

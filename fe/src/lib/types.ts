@@ -23,3 +23,13 @@ export interface Source {
   last_fetched_at: string | null;
   created_at: string;
 }
+
+export interface Digest {
+  id: string;
+  digest_date: string;
+  created_at: string;
+  updated_at: string;
+  summary_text: string;
+  total_fetched: number;
+}
+

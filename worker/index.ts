@@ -9,13 +9,10 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (event.cron === '0 1,13 * * *') {
-      // Digest cron: 8h & 20h VN
-      await scheduledDigest(env);
-    } else {
-      // Scraper cron: mỗi 3h
-      await scheduled(event, env, ctx);
-    }
+    // Scraper cron: mỗi 3h — fetch + summarize + digest
+    await scheduled(event, env, ctx);
+    // Sau khi scrape xong, tạo/cập nhật digest cho ngày hiện tại
+    await scheduledDigest(env);
   },
   async queue(batch: MessageBatch<ContentScrapeMessage>, env: Env, ctx: ExecutionContext): Promise<void> {
     await handleContentQueue(batch, env);

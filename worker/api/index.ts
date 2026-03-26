@@ -273,54 +273,53 @@ app.post('/api/articles/summarize', async (c) => {
 
 /**
  * POST /api/digest
- * Dify gửi digest tổng hợp.
- * Body: { summary_text, top_article_ids? }
+ * Manual digest submission.
+ * Body: { digest_date, summary_text }
  */
 app.post('/api/digest', async (c) => {
-    const { summary_text, top_article_ids } = await c.req.json();
+    const { digest_date, summary_text } = await c.req.json();
     if (!summary_text) return c.json({ error: 'summary_text required' }, 400);
 
+    // Default to today VN if no date provided
     const now = new Date();
-    const periodStart = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-    const idValue = crypto.randomUUID();
-    const topIds = top_article_ids || [];
+    const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const dateStr = digest_date || vnNow.toISOString().slice(0, 10);
 
     await c.env.DB.prepare(
-        `INSERT INTO digests (id, created_at, period_start, period_end, summary_text, top_article_ids, total_fetched)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO digests (id, digest_date, created_at, updated_at, summary_text, total_fetched)
+         VALUES (?, ?, ?, ?, ?, 0)
+         ON CONFLICT(digest_date) DO UPDATE SET
+           summary_text = excluded.summary_text,
+           updated_at = excluded.updated_at`
     ).bind(
-        idValue, now.toISOString(), periodStart.toISOString(), now.toISOString(),
-        summary_text, JSON.stringify(topIds), topIds.length
+        crypto.randomUUID(), dateStr, now.toISOString(), now.toISOString(), summary_text
     ).run();
 
-    return c.json({ ok: true, digestId: idValue });
+    return c.json({ ok: true, digest_date: dateStr });
 });
 
 // ── Digest Read ──────────────────────────────────────────
 
-app.get('/api/digest/latest', async (c) => {
+/**
+ * GET /api/digest?date=YYYY-MM-DD
+ * Trả về digest cho ngày cụ thể (default: hôm nay VN).
+ */
+app.get('/api/digest', async (c) => {
+    const dateParam = c.req.query('date');
+    // Default to today VN
+    const now = new Date();
+    const vnNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const dateStr = dateParam || vnNow.toISOString().slice(0, 10);
+
     const { results } = await c.env.DB.prepare(
-        'SELECT * FROM digests ORDER BY created_at DESC LIMIT 1'
-    ).all();
+        'SELECT * FROM digests WHERE digest_date = ?'
+    ).bind(dateStr).all();
 
     if (!results || results.length === 0) {
-        return c.json({ error: 'No digest available yet' }, 404);
+        return c.json({ digest: null });
     }
 
-    const latestDigest = results[0] as any;
-    let topArticles: any[] = [];
-    try {
-        const topIds: string[] = JSON.parse(latestDigest.top_article_ids);
-        if (topIds.length > 0) {
-            const placeholders = topIds.map(() => '?').join(',');
-            const query = await c.env.DB.prepare(
-                `SELECT * FROM articles WHERE id IN (${placeholders})`
-            ).bind(...topIds).all();
-            topArticles = query.results;
-        }
-    } catch (e) {}
-
-    return c.json({ digest: latestDigest, topArticles });
+    return c.json({ digest: results[0] });
 });
 
 // ── Sources ──────────────────────────────────────────────
@@ -449,5 +448,6 @@ app.post('/api/push/subscribe', async (c) => {
 app.delete('/api/push/unsubscribe', async (c) => {
     return c.json({ ok: true });
 });
+
 
 export default app;

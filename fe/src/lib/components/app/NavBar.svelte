@@ -6,7 +6,6 @@
 
   const navLinks = [
     { href: '/', label: 'Tin tức' },
-    { href: '/digest', label: 'Báo cáo' },
     { href: '/sources', label: 'Nguồn tin' },
   ];
 
