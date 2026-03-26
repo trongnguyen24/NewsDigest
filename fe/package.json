@@ -38,6 +38,7 @@
 		"@tailwindcss/typography": "^0.5.19",
 		"clsx": "^2.1.1",
 		"marked": "^17.0.5",
+		"overlayscrollbars-svelte": "^0.5.5",
 		"tailwind-merge": "^3.5.0"
 	}
 }

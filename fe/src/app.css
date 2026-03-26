@@ -39,6 +39,7 @@
   --radius-sm: calc(var(--radius) - 4px);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-cus-button: hsl(var(--button-cus));
 }
 
 :root {
@@ -62,6 +63,7 @@
   --destructive-foreground: 210 40% 98%;
   --ring: 222.2 84% 4.9%;
   --radius: 0.5rem;
+  --button-cus: 60 20% 98%;
 }
 
 .dark {
@@ -93,4 +95,44 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-zinc-300 dark:bg-zinc-700 rounded-full;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-zinc-400 dark:bg-zinc-600;
+  }
+}
+
+aside[data-overlayscrollbars] {
+  position: sticky !important;
+}
+
+.cus-button {
+  border-radius: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-cus-button);
+  border: 1px solid white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.cus-button:active {
+  scale: 0.85;
+  transition: all 0.1s ease;
+}
+
+.cus-button:disabled {
+  cursor: default;
 }

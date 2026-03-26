@@ -1,0 +1,220 @@
+<script lang="ts">
+  import { goto } from '$app/navigation';
+  import { filters } from '$lib/stores/articles';
+  import { ChevronLeft, ChevronRight, Settings } from 'lucide-svelte';
+  import type { Article } from '$lib/types';
+  import { sources } from '$lib/stores/sources';
+  import { marked } from 'marked';
+
+  let { data } = $props();
+
+  let todayStr = $derived.by(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
+
+  let isToday = $derived(data.currentDate === todayStr);
+
+  let formattedDate = $derived.by(() => {
+    const d = new Date(`${data.currentDate}T00:00:00`);
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+  });
+
+  function goToDate(offset: number) {
+    const current = new Date(`${data.currentDate}T00:00:00`);
+    current.setDate(current.getDate() + offset);
+    const y = current.getFullYear();
+    const m = String(current.getMonth() + 1).padStart(2, '0');
+    const d = String(current.getDate()).padStart(2, '0');
+    const newDate = `${y}-${m}-${d}`;
+    const todayNow = new Date();
+    const todayFormatted = `${todayNow.getFullYear()}-${String(todayNow.getMonth() + 1).padStart(2, '0')}-${String(todayNow.getDate()).padStart(2, '0')}`;
+    if (newDate === todayFormatted) {
+      goto('/', { invalidateAll: true });
+    } else {
+      goto(`/?date=${newDate}`, { invalidateAll: true });
+    }
+  }
+
+  let filteredArticles = $derived.by(() => {
+    let result: Article[] = data.articles || [];
+    // Keep it simple for now, can apply existing filters logic if needed
+    // The design is minimalistic so we don't display tag chips, but we'll apply them if they exist in state.
+    if ($filters.tag) {
+      result = result.filter(a => {
+        try {
+          const tags: string[] = a.tags ? JSON.parse(a.tags) : [];
+          return tags.some(t => t.toLowerCase() === $filters.tag.toLowerCase());
+        } catch { return false; }
+      });
+    }
+    if ($filters.minHot > 0) {
+      result = result.filter(a => (a.hot_score ?? 0) >= $filters.minHot);
+    }
+    return result;
+  });
+
+  let viewMode: 'article' | 'digest' | 'list' = $state('list');
+  let selectedArticle: Article | null = $state(null);
+
+  // automatically select the first article when articles load on desktop
+  let innerWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  
+  let currentDatasetId = $state('');
+  
+  $effect(() => {
+    // Whenever the date changes, pick an initial selection for desktop
+    if (data.currentDate !== currentDatasetId) {
+      currentDatasetId = data.currentDate;
+      if (innerWidth >= 768) {
+        if (data.digest) {
+          viewMode = 'digest';
+          selectedArticle = null;
+        } else if (filteredArticles.length > 0) {
+          selectedArticle = filteredArticles[0];
+          viewMode = 'article';
+        } else {
+          viewMode = 'list';
+          selectedArticle = null;
+        }
+      } else {
+        viewMode = 'list';
+        selectedArticle = null;
+      }
+    }
+  });
+
+  function selectArticle(a: Article) {
+    selectedArticle = a;
+    viewMode = 'article';
+  }
+
+  function getSourceName(id: string) {
+    return $sources.find((s) => s.id === id)?.name || 'Unknown';
+  }
+</script>
+
+<svelte:window bind:innerWidth />
+
+<svelte:head>
+  <title>NewsDigest - {formattedDate}</title>
+</svelte:head>
+
+<div class="h-screen w-full max-w-[1400px] mx-auto flex flex-col md:flex-row p-0 md:p-6 md:gap-8 transition-colors">
+  
+  <!-- Left Column: Navigation & List -->
+  <aside class="w-full md:w-[380px] lg:w-[420px] flex-col h-full {viewMode === 'list' || innerWidth >= 768 ? 'flex' : 'hidden md:flex'} pt-6 md:pt-0 shrink-0 border-r md:border-none border-zinc-200/50 dark:border-zinc-800/50 bg-[#fdfbf7] dark:bg-zinc-950">
+    
+    <!-- Top Header / Navigator -->
+    <div class="flex items-center justify-between mb-8 px-6 md:px-2 shrink-0">
+      <div class="flex items-center gap-1 sm:gap-4 bg-white dark:bg-zinc-900 rounded-full px-1.5 sm:px-2 py-1.5 shadow-sm border border-black/5 dark:border-white/10">
+        <button onclick={() => goToDate(-1)} class="p-1 sm:p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"><ChevronLeft size={16} /></button>
+        <span class="text-sm font-medium px-1 sm:px-2 font-mono tracking-tight">{formattedDate}</span>
+        <button onclick={() => goToDate(1)} class="p-1 sm:p-1.5 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100" disabled={isToday} class:opacity-30={isToday}><ChevronRight size={16} /></button>
+      </div>
+      
+      <div class="flex items-center gap-2 sm:gap-3">
+        {#if data.digest}
+          <button 
+             onclick={() => { viewMode = 'digest'; selectedArticle = null; }}
+             class="text-sm bg-white dark:bg-zinc-900 shadow-sm border border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-medium transition-colors {viewMode === 'digest' ? 'ring-2 ring-primary ring-offset-2 ring-offset-[#fdfbf7] dark:ring-offset-zinc-950' : ''}">
+            Summary
+          </button>
+        {/if}
+        
+      </div>
+    </div>
+
+    <!-- Article List -->
+    <div class="flex-1 overflow-y-auto space-y-6 px-6 md:px-2 pb-24 md:pb-8 custom-scrollbar">
+      {#each filteredArticles as article (article.id)}
+        {@const isSelected = selectedArticle?.id === article.id && viewMode === 'article'}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div 
+          class="cursor-pointer group transition-all duration-300 py-1"
+          onclick={() => selectArticle(article)}
+        >
+          <div class="flex justify-between items-center text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-2">
+            <span class="truncate pr-4">{getSourceName(article.source_id)}</span>
+            <span class="whitespace-nowrap shrink-0">
+              {new Date(article.published_at || article.fetched_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} 
+              {new Date(article.published_at || article.fetched_at).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short' })}
+            </span>
+          </div>
+          <h3 class="font-serif text-[1.25rem] leading-[1.3] mb-2 font-bold text-zinc-800 dark:text-zinc-200 group-hover:underline underline-offset-4 decoration-zinc-800/30 dark:decoration-zinc-200/30 transition-all">
+            {article.title}
+          </h3>
+          <p class="text-[0.9rem] text-zinc-600 dark:text-zinc-400 line-clamp-3 leading-relaxed">
+            {article.description_vn || article.description || article.summary?.replace(/<[^>]*>?/gm, '').substring(0, 150) || 'Đang xử lý nội dung...'}
+          </p>
+        </div>
+      {/each}
+      
+      {#if filteredArticles.length === 0}
+         <div class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+           Không có bài viết nào trong ngày này.
+         </div>
+      {/if}
+    </div>
+  </aside>
+
+  <!-- Right Column: Article Details / Digest -->
+  <!-- Always full screen on mobile when viewMode !== 'list', properly shaped on desktop -->
+  <main class="flex-1 h-full relative {viewMode !== 'list' ? 'block' : 'hidden md:block'} z-10 bg-white dark:bg-zinc-900 md:bg-transparent">
+    
+    <!-- Mobile Header -->
+    <div class="md:hidden flex items-center p-4 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 sticky top-0 z-20">
+      <button 
+        onclick={() => { viewMode = 'list'; }}
+        class="p-2 -ml-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full text-zinc-600 dark:text-zinc-400 transition-colors"
+      >
+        <ChevronLeft size={24} />
+      </button>
+      <span class="ml-2 font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">
+        {viewMode === 'digest' ? 'Digest Summary' : selectedArticle?.title}
+      </span>
+    </div>
+
+    <!-- Content Card -->
+    <div class="bg-white dark:bg-zinc-900 md:rounded-3xl p-6 md:p-12 h-[calc(100vh-65px)] md:h-full overflow-y-auto shadow-sm md:border border-black/5 dark:border-white/5 custom-scrollbar">
+      
+      {#if viewMode === 'digest' && data.digest}
+        <h1 class="font-serif text-3xl md:text-4xl font-bold mb-8 leading-[1.15] text-zinc-900 dark:text-zinc-50">Ngày {formattedDate}</h1>
+        <div class="prose prose-zinc dark:prose-invert max-w-none prose-headings:font-serif prose-headings:mt-8 prose-headings:mb-4 prose-p:leading-relaxed prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+          {@html marked.parse(data.digest.summary_text)}
+        </div>
+      
+      {:else if viewMode === 'article' && selectedArticle}
+        <h1 class="font-serif text-3xl md:text-4xl font-bold mb-8 leading-[1.2] text-zinc-900 dark:text-zinc-50">
+          {selectedArticle.title}
+        </h1>
+        
+        <div class="prose prose-zinc dark:prose-invert max-w-none prose-headings:font-serif prose-headings:mt-8 prose-headings:mb-4 prose-p:leading-relaxed prose-li:leading-relaxed">
+          {#if selectedArticle.summary}
+            {@html marked.parse(selectedArticle.summary)}
+          {:else if selectedArticle.content}
+            {@html marked.parse(selectedArticle.content)}
+          {:else}
+            <p class="text-zinc-500 italic">Nội dung đang được xử lý...</p>
+          {/if}
+        </div>
+        
+        <div class="mt-16 pt-8 border-t border-zinc-100 dark:border-zinc-800 pb-8">
+          <a href={selectedArticle.url} target="_blank" rel="noopener noreferrer" class="inline-flex items-center text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:underline px-6 py-3 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+            Đọc bài gốc tại {getSourceName(selectedArticle.source_id)} ↗
+          </a>
+        </div>
+      
+      {:else}
+        <div class="h-full flex flex-col items-center justify-center text-zinc-400">
+          <div class="w-16 h-16 mb-4 rounded-full bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-center border border-zinc-100 dark:border-zinc-800">
+             <span class="text-2xl opacity-50">📰</span>
+          </div>
+          <p>Chọn một bài viết để xem chi tiết</p>
+        </div>
+      {/if}
+
+    </div>
+  </main>
+</div>
