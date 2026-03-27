@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Brygada 1918';
+  src: url('/Brygada1918-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 @plugin "tailwindcss-animate";
 @plugin "@tailwindcss/typography";
 
@@ -13,6 +20,7 @@
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-text-main: hsl(var(--text-main));
+  --color-text-main-2: hsl(var(--text-main-2));
   --color-text-secondary: hsl(var(--text-secondary));
 
   --color-primary: hsl(var(--primary));
@@ -41,12 +49,14 @@
   --radius-sm: calc(var(--radius) - 4px);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --color-cus-button: hsl(var(--button-cus));
+  --font-serif: "Brygada 1918", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+
 }
 
 :root {
   --background: 0 0% 100%;
   --text-main: 60 2.521% 23.33%;
+  --text-main-2: 60 2.564% 7.647%;
   --text-secondary: 51.43 3.139% 43.73%;
   --foreground: 222.2 84% 4.9%;
   --muted: 210 40% 96.1%;
@@ -67,7 +77,7 @@
   --destructive-foreground: 210 40% 98%;
   --ring: 222.2 84% 4.9%;
   --radius: 0.5rem;
-  --button-cus: 60 20% 98%;
+
 }
 
 .dark {
@@ -145,23 +155,21 @@ aside[data-overlayscrollbars] {
   }
 }
 
-.cus-button {
-  border-radius: 100px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-cus-button);
-  border: 1px solid white;
+.digest-article-ref {
+  display: inline;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-text-main);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--color-border);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 8px 16px rgba(73, 71, 69, 0.03), 0 4px 8px rgba(73, 71, 69, 0.03);
+  transition: text-decoration-color 0.2s ease;
 }
-
-.cus-button:active {
-  scale: 0.85;
-  transition: all 0.1s ease;
-}
-
-.cus-button:disabled {
-  cursor: default;
+.digest-article-ref:hover {
+  text-decoration-color: var(--color-text-main);
 }

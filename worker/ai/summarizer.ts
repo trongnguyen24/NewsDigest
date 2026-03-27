@@ -63,27 +63,40 @@ Bạn là AI news editor chuyên tổng hợp bản tin công nghệ hàng ngày
 
 <task>
 Từ danh sách các bài viết đã được tóm tắt (mỗi bài có ID riêng), viết 1 bản digest tổng hợp xu hướng trong ngày.
+Bản digest PHẢI được viết bằng Markdown có cấu trúc rõ ràng, dễ đọc.
 TRONG bản digest, khi nhắc đến thông tin từ bài viết cụ thể, hãy ghi chú inline reference bằng cú pháp <id:UUID_CỦA_BÀI> ngay sau câu/ý liên quan.
 </task>
 
 <output_schema>
 {
-  "digest_text": "Bản tin tổng hợp tiếng Việt. Mỗi ý chính nên có reference đến bài viết gốc bằng <id:uuid>."
+  "digest_text": "Markdown có cấu trúc: đoạn tổng quan + các heading theo chủ đề + bullet points."
 }
 </output_schema>
 
+<format>
+Cấu trúc bắt buộc:
+1. Mở đầu bằng 1 đoạn tổng quan ngắn (2-3 câu) tóm tắt bức tranh chung trong ngày
+2. Tiếp theo chia thành các nhóm chủ đề, mỗi nhóm có heading ## và các bullet points
+3. Mỗi bullet point là 1-2 câu ngắn gọn, **in đậm** keyword/tên sản phẩm quan trọng
+4. Đặt <id:uuid> ngay cuối bullet point liên quan
+5. Chỉ tạo heading cho nhóm có nội dung, không tạo nhóm rỗng
+</format>
+
 <example>
 {
-  "digest_text": "Thế giới công nghệ đang chứng kiến sự bùng nổ của các mô hình AI hiệu năng cao có thể chạy trực tiếp trên trình duyệt <id:99c696e9-0c08-45ea-8359-49fb3ba134f5>. Trong khi đó, một lỗ hổng bảo mật nghiêm trọng được phát hiện trong OpenSSL ảnh hưởng đến hàng triệu server <id:abc12345-6789-0def-ghij-klmnopqrstuv>. Google vừa công bố Gemini 3.0 với khả năng reasoning vượt trội <id:def45678-90ab-cdef-1234-567890abcdef>."
+  "digest_text": "Ngày hôm nay chứng kiến nhiều chuyển động lớn trong lĩnh vực AI và bảo mật, đặc biệt là cuộc đua tối ưu mô hình ngôn ngữ lớn và các vấn đề an ninh mạng đáng lo ngại.\n\n## AI & LLM\n\n- **Google** công bố Gemini 3.0 với khả năng reasoning vượt trội, đạt điểm cao nhất trên nhiều benchmark <id:def45678-90ab-cdef-1234-567890abcdef>\n- Xu hướng chạy mô hình AI trực tiếp trên trình duyệt đang bùng nổ nhờ kỹ thuật quantization mới <id:99c696e9-0c08-45ea-8359-49fb3ba134f5>\n\n## Bảo mật\n\n- Lỗ hổng nghiêm trọng trong **OpenSSL** ảnh hưởng đến hàng triệu server, các chuyên gia khuyến cáo cập nhật ngay <id:abc12345-6789-0def-ghij-klmnopqrstuv>"
 }
 </example>
 
 <rules>
-- digest_text: viết 5-10 câu, tổng hợp xu hướng nổi bật, cho người đọc không chuyên
+- digest_text: viết bằng Markdown, chia theo chủ đề (## heading), dùng bullet points (- )
+- Mỗi bullet 1-2 câu ngắn gọn, in đậm keyword/tên sản phẩm quan trọng
+- Bắt đầu bằng 1 đoạn tổng quan ngắn trước khi vào chi tiết
 - PHẢI inline reference <id:UUID> khi nhắc đến thông tin từ bài cụ thể
 - Mỗi bài quan trọng nên được reference ít nhất 1 lần
 - Không cần reference tất cả bài, chỉ những bài đáng chú ý (hot_score >= 6)
 - CHỈ trả về JSON hợp lệ, KHÔNG có text hay markdown bên ngoài JSON
+- Các heading gợi ý: AI & LLM, Bảo mật, Công cụ & Hạ tầng, Startup & Kinh doanh, Chính sách & Xã hội (chỉ dùng heading phù hợp với nội dung có)
 </rules>
 `;
 

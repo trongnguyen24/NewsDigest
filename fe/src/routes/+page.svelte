@@ -13,6 +13,7 @@
   import { marked } from 'marked'
   import { OverlayScrollbarsComponent } from 'overlayscrollbars-svelte'
   import { slideScaleFade } from '$lib/transitions/slideScaleFade'
+  import CusButton from '$lib/components/ui/CusButton.svelte'
 
   let { data } = $props()
 
@@ -66,7 +67,7 @@
     return result
   })
 
-  let viewMode: 'article' | 'digest' | 'list' = $state('list')
+  let sideView: 'list' | 'digest' = $state('list')
   let selectedArticle: Article | null = $state(null)
 
   // automatically select the first article when articles load on desktop
@@ -82,17 +83,17 @@
       currentDatasetId = data.currentDate
       if (innerWidth >= 768) {
         if (data.digest) {
-          viewMode = 'digest'
+          sideView = 'digest'
           selectedArticle = null
         } else if (filteredArticles.length > 0) {
+          sideView = 'list'
           selectedArticle = filteredArticles[0]
-          viewMode = 'article'
         } else {
-          viewMode = 'list'
+          sideView = 'list'
           selectedArticle = null
         }
       } else {
-        viewMode = 'list'
+        sideView = 'list'
         selectedArticle = null
       }
     }
@@ -100,11 +101,31 @@
 
   function selectArticle(a: Article) {
     selectedArticle = a
-    viewMode = 'article'
   }
 
   function getSourceName(id: string) {
     return $sources.find((s) => s.id === id)?.name || 'Unknown'
+  }
+
+  // Parse digest summary_text: replace <id:uuid> with clickable article anchors
+  let parsedDigestHtml = $derived.by(() => {
+    if (!data.digest?.summary_text) return ''
+    // Replace <id:uuid> in raw markdown BEFORE marked parses it
+    const processed = data.digest.summary_text.replace(/<id:([a-f0-9-]+)>/gi, (_match, id) => {
+      const article = (data.articles || []).find((a: Article) => a.id === id)
+      const title = article?.title || 'Bài viết'
+      return `<button class="digest-article-ref" data-article-id="${id}">↗</button>`
+    })
+    return marked.parse(processed) as string
+  })
+
+  function handleDigestClick(e: MouseEvent) {
+    const target = (e.target as HTMLElement).closest('.digest-article-ref') as HTMLElement | null
+    if (!target) return
+    const articleId = target.dataset.articleId
+    if (!articleId) return
+    const article = (data.articles || []).find((a) => a.id === articleId)
+    if (article) selectArticle(article)
   }
 </script>
 
@@ -119,108 +140,141 @@
     <!-- Top Header / Navigator -->
     <nav class=" absolute z-10 flex justify-between px-6 top-6 left-0 right-0">
       <div class="flex gap-1">
-        <button onclick={() => goToDate(-1)} class="cus-button size-8">
+        <CusButton onclick={() => goToDate(-1)} class="size-8">
           <ChevronLeft size={20} />
-        </button>
-        <div class="cus-button h-8 w-24 text-sm">{formattedDate}</div>
-        <button
-          onclick={() => goToDate(1)}
-          class="cus-button size-8"
-          disabled={isToday}
+        </CusButton>
+        <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton>
+        <CusButton onclick={() => goToDate(1)} class="size-8" disabled={isToday}
           ><ChevronRight size={20} />
-        </button>
+        </CusButton>
       </div>
       <!-- svelte-ignore a11y_consider_explicit_label -->
-      <button
+      <CusButton
         onclick={() => {
-          viewMode = 'digest'
+          sideView = sideView === 'digest' ? 'list' : 'digest'
         }}
-        class="cus-button relative w-16 flex gap-3"
+        class="size-8"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          class="size-5"
-        >
-          <path
-            fill-rule="evenodd"
-            d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z"
-            clip-rule="evenodd"
-          />
-        </svg>
-
-        <!-- <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-        >
-          <path
-            fill="currentColor"
-            d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z"
-          />
-        </svg> -->
-      </button>
+        <div class="grid place-items-center">
+          {#if sideView === 'digest'}
+            <div
+              class="col-start-1 row-start-1"
+              in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+              out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+            >
+              <!-- List icon -->
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                class="size-5"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+          {:else}
+            <div
+              class="col-start-1 row-start-1"
+              in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+              out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+            >
+              <!-- Sparkle/Digest icon -->
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+              >
+                <path
+                  fill="currentColor"
+                  d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z"
+                />
+              </svg>
+            </div>
+          {/if}
+        </div>
+      </CusButton>
     </nav>
     <div
       class="left-0 z-5 absolute right-2.5 top-0 h-24 bg-linear-to-b from-[#F5F4EC] from-10% to-[#F5F4EC]/0"
     ></div>
-    <!-- Article List -->
+    <!-- Aside Content: Digest or Article List -->
     <OverlayScrollbarsComponent
       defer
       options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
       class="px-6 py-24"
     >
-      <div class=" flex flex-col gap-8">
-        {#each filteredArticles as article (article.id)}
-          {@const isSelected =
-            selectedArticle?.id === article.id && viewMode === 'article'}
+      {#if sideView === 'digest'}
+        {#if data.digest}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
-            class="cursor-pointer relative group article-item {isSelected
-              ? 'article-selected'
-              : ''}"
-            onclick={() => selectArticle(article)}
+            class="prose prose-sm max-w-none text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main! prose-headings:text-base prose-headings:mt-6 prose-headings:mb-2 prose-p:leading-relaxed"
+            onclick={handleDigestClick}
           >
-            <div
-              class="flex items-center text-[0.625rem] text-text-secondary uppercase tracking-wider mb-2"
-            >
-              <span class="truncate pr-4"
-                >{getSourceName(article.source_id)}</span
-              >
-              <span class="whitespace-nowrap shrink-0">
-                {new Date(
-                  article.published_at || article.fetched_at,
-                ).toLocaleTimeString('vi-VN', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
-            </div>
-            <h3
-              class="font-serif text-[1rem] leading-[1.4] mb-2 font-bold text-text-main group-hover:underline underline-offset-4 transition-all"
-            >
-              {@html article.title}
-            </h3>
-            <p class="text-sm text-text-secondary leading-relaxed">
-              {article.description_vn ||
-                article.description ||
-                article.summary?.replace(/<[^>]*>?/gm, '').substring(0, 150) ||
-                'Đang xử lý nội dung...'}
-            </p>
+            {@html parsedDigestHtml}
           </div>
-        {/each}
-
-        {#if filteredArticles.length === 0}
+        {:else}
           <div
             class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
           >
-            Không có bài viết nào trong ngày này.
+            Chưa có bản tin tổng hợp cho ngày này.
           </div>
         {/if}
-      </div>
+      {:else}
+        <div class="flex flex-col gap-8">
+          {#each filteredArticles as article (article.id)}
+            {@const isSelected = selectedArticle?.id === article.id}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="cursor-pointer relative group article-item {isSelected
+                ? 'article-selected'
+                : ''}"
+              onclick={() => selectArticle(article)}
+            >
+              <div
+                class="flex items-center text-[0.625rem] text-text-secondary uppercase tracking-wider mb-2"
+              >
+                <span class="truncate pr-4"
+                  >{getSourceName(article.source_id)}</span
+                >
+                <span class="whitespace-nowrap shrink-0">
+                  {new Date(
+                    article.published_at || article.fetched_at,
+                  ).toLocaleTimeString('vi-VN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+              <h3
+                class="font-serif text-[1rem] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all"
+              >
+                {@html article.title}
+              </h3>
+              <p class="text-sm text-text-secondary leading-relaxed">
+                {article.description_vn ||
+                  article.description ||
+                  article.summary?.replace(/<[^>]*>?/gm, '').substring(0, 150) ||
+                  'Đang xử lý nội dung...'}
+              </p>
+            </div>
+          {/each}
+
+          {#if filteredArticles.length === 0}
+            <div
+              class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl"
+            >
+              Không có bài viết nào trong ngày này.
+            </div>
+          {/if}
+        </div>
+      {/if}
     </OverlayScrollbarsComponent>
   </aside>
   <OverlayScrollbarsComponent
@@ -231,16 +285,16 @@
   >
     {#if selectedArticle}
       <div class="flex gap-1">
-        <button class="cus-button size-8"><ChevronLeft size={20} /></button>
-        <button class="cus-button size-8"><ChevronRight size={20} /></button>
+        <CusButton class="size-8"><ChevronLeft size={20} /></CusButton>
+        <CusButton class="size-8"><ChevronRight size={20} /></CusButton>
         <div class="ml-auto flex gap-1">
-          <a
+          <CusButton
             href={selectedArticle.url}
             target="_blank"
             rel="noopener noreferrer"
-            class="cus-button size-8"
+            class="size-8"
           >
-            <ExternalLink size={16} /></a
+            <ExternalLink size={16} /></CusButton
           >
         </div>
       </div>
@@ -251,7 +305,7 @@
       </h1>
 
       <div
-        class="prose prose-headings:text-text-main! prose-p:text-text-secondary! dark:prose-invert max-w-none prose-base prose-headings:mt-8 prose-h2:text-xl prose-h3:text-lg prose-h4:text-lg prose-headings:mb-4 prose-p:leading-relaxed prose-li:leading-relaxed"
+        class="prose text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main-2! prose-blockquote:text-text-main-2! prose-code:text-text-main-2! dark:prose-invert max-w-none prose-base prose-headings:mt-8 prose-h2:text-xl prose-h3:text-lg prose-h4:text-lg prose-headings:mb-4 prose-p:leading-relaxed prose-li:leading-relaxed"
       >
         {#if selectedArticle.summary}
           {@html marked.parse(selectedArticle.summary)}
