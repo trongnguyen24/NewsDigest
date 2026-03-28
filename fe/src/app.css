@@ -206,3 +206,80 @@ aside[data-overlayscrollbars] {
 .digest-article-ref:hover {
   text-decoration-color: var(--color-text-main);
 }
+
+/* ═══════════════ MOBILE LAYOUT ═══════════════ */
+.mobile-layout {
+  min-height: 100svh;
+}
+
+.mobile-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-bg-1);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mobile-content {
+  padding: 1.25rem 1rem 2rem;
+}
+
+/* ═══════════════ DRAWER ═══════════════ */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.drawer-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  height: 90svh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg-2);
+  border-radius: 1rem 1rem 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.drawer-handle-bar {
+  display: flex;
+  justify-content: center;
+  padding: 0.625rem 0 0.25rem;
+  flex-shrink: 0;
+}
+
+.drawer-handle {
+  width: 2rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background-color: var(--color-border);
+}
+
+.drawer-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 1rem 0.5rem;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 1.25rem 1rem 3rem;
+  overscroll-behavior: contain;
+}

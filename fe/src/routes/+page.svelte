@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte'
+  import { fly } from 'svelte/transition'
   import { browser } from '$app/environment'
   import { goto } from '$app/navigation'
   import { filters } from '$lib/stores/articles'
@@ -31,6 +32,9 @@
   let unsummarizedCount = $state(0)
   let resummarizing = $state(false)
   let resummarizeResult: { summarized: number; failed: number } | null = $state(null)
+
+  // ── Mobile / Drawer state ──────────────────────────────────
+  let drawerOpen = $state(false)
 
   // Fetch articles + digest client-side
   async function fetchData(date: string) {
@@ -182,6 +186,7 @@
   let innerWidth = $state(
     typeof window !== 'undefined' ? window.innerWidth : 1024,
   )
+  let mobileMode = $derived(innerWidth < 640)
 
   let currentDatasetId = $state('')
 
@@ -211,6 +216,7 @@
 
   function selectArticle(a: Article) {
     selectedArticle = a
+    if (mobileMode) drawerOpen = true
   }
 
   function goToPrevArticle() {
@@ -275,6 +281,212 @@
   <title>NewsDigest - {formattedDate}</title>
 </svelte:head>
 
+{#if mobileMode}
+<!-- ═══════════════ MOBILE LAYOUT ═══════════════ -->
+<div class="mobile-layout" style="background-color: var(--color-bg-1);">
+  <!-- Mobile Top Header / Navigator -->
+  <nav class="mobile-nav">
+    <div class="flex gap-1">
+      <CusButton onclick={() => goToDate(-1)} class="size-8">
+        <ChevronLeft class="-translate-x-px" size={20} />
+      </CusButton>
+      <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton>
+      <CusButton onclick={() => goToDate(1)} class="size-8" disabled={isToday}
+        ><ChevronRight class="translate-x-px" size={20} />
+      </CusButton>
+    </div>
+    <div class="flex gap-1">
+      {#if unsummarizedCount > 0}
+        <!-- svelte-ignore a11y_consider_explicit_label -->
+        <CusButton
+          onclick={handleResummarize}
+          disabled={resummarizing}
+          class="h-8 px-2 text-xs gap-1"
+        >
+          {#if resummarizing}
+            <Loader2 size={14} class="animate-spin" />
+          {:else}
+            <Sparkles size={14} />
+          {/if}
+          <span>{resummarizing ? 'Đang xử lý...' : `AI (${unsummarizedCount})`}</span>
+        </CusButton>
+      {/if}
+      <!-- svelte-ignore a11y_consider_explicit_label -->
+      <CusButton
+        onclick={() => {
+          sideView = sideView === 'digest' ? 'list' : 'digest'
+        }}
+        class="size-8"
+      >
+        <div class="grid place-items-center">
+          {#if sideView === 'digest'}
+            <div
+              class="col-start-1 row-start-1"
+              in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+              out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+                <path fill-rule="evenodd" d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z" clip-rule="evenodd" />
+              </svg>
+            </div>
+          {:else}
+            <div
+              class="col-start-1 row-start-1"
+              in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+              out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+                <path fill="currentColor" d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z" />
+              </svg>
+            </div>
+          {/if}
+        </div>
+      </CusButton>
+      <!-- svelte-ignore a11y_consider_explicit_label -->
+      <CusButton
+        onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
+        class="size-8"
+      >
+        {#if $prefs.darkMode}
+          <Sun size={16} />
+        {:else}
+          <Moon size={16} />
+        {/if}
+      </CusButton>
+    </div>
+  </nav>
+
+  <!-- Mobile Article List / Digest (body scroll) -->
+  <div class="mobile-content">
+    {#if loading}
+      <div class="flex flex-col gap-8 animate-pulse">
+        {#each Array(6) as _}
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <div class="h-3 w-20 rounded bg-zinc-200 dark:bg-zinc-800"></div>
+              <div class="h-3 w-10 rounded bg-zinc-200 dark:bg-zinc-800"></div>
+            </div>
+            <div class="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-800 mb-2"></div>
+            <div class="h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-800 mb-1"></div>
+            <div class="h-4 w-1/2 rounded bg-zinc-200 dark:bg-zinc-800"></div>
+          </div>
+        {/each}
+      </div>
+    {:else if sideView === 'digest'}
+      {#if digest}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="prose prose-sm max-w-none text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main! prose-headings:text-base prose-headings:mt-6 prose-headings:mb-2 prose-p:leading-relaxed"
+          onclick={handleDigestClick}
+        >
+          {@html parsedDigestHtml}
+        </div>
+      {:else}
+        <div class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+          Chưa có bản tin tổng hợp cho ngày này.
+        </div>
+      {/if}
+    {:else}
+      <div class="flex flex-col gap-6">
+        {#each filteredArticles as article (article.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="cursor-pointer relative group"
+            onclick={() => selectArticle(article)}
+          >
+            <div class="flex items-center text-[0.625rem] text-text-secondary uppercase tracking-wider mb-2">
+              <span class="truncate pr-4">{getSourceName(article.source_id)}</span>
+              <span class="whitespace-nowrap shrink-0">
+                {new Date(article.published_at || article.fetched_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <h3 class="font-serif text-[1rem] leading-[1.4] mb-2 font-semibold text-text-main group-hover:underline underline-offset-4 transition-all">
+              {@html article.title}
+            </h3>
+            <p class="text-sm text-text-secondary leading-relaxed">
+              {article.description_vn || article.description || article.summary?.replace(/<[^>]*>?/gm, '').substring(0, 150) || 'Đang xử lý nội dung...'}
+            </p>
+          </div>
+        {/each}
+
+        {#if filteredArticles.length === 0}
+          <div class="text-sm text-zinc-500 py-10 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">
+            Không có bài viết nào trong ngày này.
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
+</div>
+
+<!-- ═══════════════ MOBILE DRAWER ═══════════════ -->
+{#if drawerOpen && selectedArticle}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="drawer-backdrop" onclick={() => (drawerOpen = false)} transition:fly={{ duration: 200 }}></div>
+  <div class="drawer-panel" transition:fly={{ y: 600, duration: 300 }}>
+    <!-- Drag handle -->
+    <div class="drawer-handle-bar">
+      <div class="drawer-handle"></div>
+    </div>
+    <!-- Drawer navigation -->
+    <div class="drawer-nav">
+      <div class="flex gap-1">
+        <CusButton
+          onclick={() => { goToPrevArticle() }}
+          disabled={!selectedArticle || filteredArticles.findIndex((a) => a.id === selectedArticle?.id) <= 0}
+          class="size-8"
+        >
+          <ChevronLeft class="-translate-x-px" size={20} />
+        </CusButton>
+        <CusButton class="h-8 px-3 text-xs">
+          {filteredArticles.findIndex((a) => a.id === selectedArticle?.id) + 1} / {filteredArticles.length}
+        </CusButton>
+        <CusButton
+          onclick={() => { goToNextArticle() }}
+          disabled={!selectedArticle || filteredArticles.findIndex((a) => a.id === selectedArticle?.id) >= filteredArticles.length - 1}
+          class="size-8"
+        >
+          <ChevronRight class="translate-x-px" size={20} />
+        </CusButton>
+      </div>
+      <div class="flex gap-1">
+        <CusButton
+          href={selectedArticle.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="size-8"
+        >
+          <ExternalLink size={16} />
+        </CusButton>
+        <!-- svelte-ignore a11y_consider_explicit_label -->
+        <CusButton onclick={() => (drawerOpen = false)} class="size-8">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-4">
+            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+          </svg>
+        </CusButton>
+      </div>
+    </div>
+    <!-- Drawer content -->
+    <div class="drawer-content">
+      <h1 class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6">
+        {@html selectedArticle.title}
+      </h1>
+      <div class="prose prose-sm text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main-2! prose-blockquote:text-text-main-2! dark:prose-invert max-w-none prose-headings:mt-6 prose-h2:text-lg prose-h3:text-base prose-headings:mb-3 prose-p:leading-relaxed prose-li:leading-relaxed">
+        {#if selectedArticle.summary}
+          {@html marked.parse(selectedArticle.summary)}
+        {:else}
+          <p class="text-zinc-500 italic">Nội dung đang được xử lý...</p>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
+
+{:else}
+<!-- ═══════════════ DESKTOP LAYOUT ═══════════════ -->
 <div class="flex mx-auto max-w-7xl">
   <aside class="h-svh sticky top-0 border-r w-108 flex flex-col">
     <!-- Top Header / Navigator -->
@@ -534,3 +746,4 @@
     {/if}
   </OverlayScrollbarsComponent>
 </div>
+{/if}
