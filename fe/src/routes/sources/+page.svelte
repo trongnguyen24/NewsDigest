@@ -16,7 +16,6 @@
   let isAdding = $state(false);
   let loading = $state(true);
   let adminKey = $state('');
-  let adminKeyInput = $state('');
   let authError = $state('');
   let showKeyInput = $state(false);
 
@@ -45,9 +44,12 @@
     }
   }
 
-  function saveAdminKey() {
-    if (!adminKeyInput.trim()) return;
-    adminKey = adminKeyInput.trim();
+  function saveAdminKey(e: SubmitEvent) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    const key = (formData.get('admin_key') as string)?.trim();
+    if (!key) return;
+    adminKey = key;
     if (browser) {
       localStorage.setItem(ADMIN_KEY_STORAGE, adminKey);
     }
@@ -57,7 +59,6 @@
 
   function clearAdminKey() {
     adminKey = '';
-    adminKeyInput = '';
     if (browser) localStorage.removeItem(ADMIN_KEY_STORAGE);
     authError = '';
   }
@@ -162,15 +163,17 @@
         <Button variant="outline" size="sm" onclick={clearAdminKey}>Đăng xuất</Button>
       {:else}
         {#if showKeyInput}
-          <Input
-            type="password"
-            bind:value={adminKeyInput}
-            placeholder="Admin key..."
-            class="w-48 h-8 text-sm"
-            onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && saveAdminKey()}
-          />
-          <Button size="sm" onclick={saveAdminKey}>Lưu</Button>
-          <Button variant="outline" size="sm" onclick={() => showKeyInput = false}>Huỷ</Button>
+          <form onsubmit={saveAdminKey} class="flex items-center gap-2">
+            <Input
+              type="password"
+              name="admin_key"
+              placeholder="Admin key..."
+              class="w-48 h-8 text-sm"
+              autofocus
+            />
+            <Button size="sm" type="submit">Lưu</Button>
+            <Button variant="outline" size="sm" type="button" onclick={() => showKeyInput = false}>Huỷ</Button>
+          </form>
         {:else}
           <Button variant="outline" size="sm" onclick={() => showKeyInput = true}>
             <Lock size={14} class="mr-1" /> Đăng nhập
