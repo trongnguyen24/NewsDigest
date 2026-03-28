@@ -12,6 +12,7 @@ export interface Env {
   AI_GATEWAY_TOKEN: string;   // single token (fallback)
   AI_GATEWAY_TOKENS?: string;  // comma-separated tokens for rotation
   AI_GATEWAY_URL: string;
+  ADMIN_API_KEY?: string;
 }
 
 export interface ContentScrapeMessage {

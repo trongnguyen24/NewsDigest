@@ -1,8 +1,20 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Env } from '../types';
+import type { Context } from 'hono';
 
 const app = new Hono<{ Bindings: Env }>();
+
+/** Check X-Admin-Key header against ADMIN_API_KEY secret. Returns error Response or null. */
+function requireAdmin(c: Context<{ Bindings: Env }>): Response | null {
+  const adminKey = c.env.ADMIN_API_KEY;
+  if (!adminKey) return null; // no key configured → skip check
+  const provided = c.req.header('X-Admin-Key');
+  if (provided !== adminKey) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  return null;
+}
 
 /** Chuẩn hoá published_at về ISO 8601 UTC. */
 function normalizeDate(raw?: string | null): string {
@@ -252,14 +264,8 @@ app.post('/api/digest/generate', async (c) => {
  * - delayMs: delay giữa mỗi lần gọi Gemini (default 3000ms)
  */
 app.post('/api/articles/resummarize', async (c) => {
-    // Auth check: if ADMIN_API_KEY is set, require X-Admin-Key header
-    const adminKey = (c.env as any).ADMIN_API_KEY;
-    if (adminKey) {
-        const providedKey = c.req.header('X-Admin-Key');
-        if (providedKey !== adminKey) {
-            return c.json({ error: 'Unauthorized' }, 401);
-        }
-    }
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
 
     const body = await c.req.json().catch(() => ({}));
     const limit = Math.min(body.limit || 20, 100);
@@ -404,6 +410,9 @@ app.get('/api/sources', async (c) => {
 });
 
 app.post('/api/sources', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const { url, name, group_name } = await c.req.json();
     let type = 'rss';
     if (url.includes('reddit.com')) type = 'reddit';
@@ -419,6 +428,9 @@ app.post('/api/sources', async (c) => {
 });
 
 app.patch('/api/sources/:id', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const id = c.req.param('id');
     const body = await c.req.json();
     const sets: string[] = [];
@@ -436,6 +448,9 @@ app.patch('/api/sources/:id', async (c) => {
 });
 
 app.delete('/api/sources/:id', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const id = c.req.param('id');
     // Xoá articles liên quan trước để tránh lỗi foreign key
     await c.env.DB.batch([
@@ -446,6 +461,9 @@ app.delete('/api/sources/:id', async (c) => {
 });
 
 app.post('/api/sources/:id/fetch', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const sourceId = c.req.param('id');
     const { results } = await c.env.DB.prepare('SELECT * FROM sources WHERE id = ?').bind(sourceId).all();
     if (!results || results.length === 0) return c.json({ error: 'Not found' }, 404);
@@ -476,6 +494,9 @@ app.post('/api/sources/:id/fetch', async (c) => {
  * Dùng cho Dify agent để giảm số lượng API calls.
  */
 app.post('/api/sources/fetch-all', async (c) => {
+    const authErr = requireAdmin(c);
+    if (authErr) return authErr;
+
     const { results: sources } = await c.env.DB.prepare('SELECT * FROM sources WHERE enabled = 1').all();
     if (!sources || sources.length === 0) return c.json({ ok: true, results: [], message: 'No enabled sources' });
 
