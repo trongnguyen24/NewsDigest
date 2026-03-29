@@ -22,14 +22,16 @@
   import { OverlayScrollbarsComponent } from 'overlayscrollbars-svelte'
   import { slideScaleFade } from '$lib/transitions/slideScaleFade'
   import CusButton from '$lib/components/ui/CusButton.svelte'
+  import { articleCache } from '$lib/stores/articleCache.svelte'
 
   let { data } = $props()
 
-  // ── Client-side data state ──────────────────────────────────
-  let articles: Article[] = $state([])
-  let digest: Digest | null = $state(null)
-  let loading = $state(true)
-  let unsummarizedCount = $state(0)
+  // ── Derived from cache store ─────────────────────────────────
+  let articles = $derived(articleCache.articles)
+  let digest = $derived(articleCache.digest)
+  let loading = $derived(articleCache.loading)
+  let unsummarizedCount = $derived(articleCache.getUnsummarizedCount())
+
   let resummarizing = $state(false)
   let resummarizeResult: {
     summarized: number
@@ -40,41 +42,6 @@
 
   // ── Mobile / Drawer state ──────────────────────────────────
   let drawerOpen = $state(false)
-
-  // Fetch articles + digest client-side
-  async function fetchData(date: string) {
-    loading = true
-    try {
-      const dayStart = new Date(`${date}T00:00:00`)
-      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
-      const from = dayStart.toISOString()
-      const to = dayEnd.toISOString()
-
-      const [articlesRes, digestRes] = await Promise.all([
-        fetch(
-          api(
-            `/api/articles?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=200&sort=date`,
-          ),
-        ),
-        fetch(api(`/api/digest?date=${date}`)),
-      ])
-
-      const articlesData = await articlesRes.json()
-      const digestData = await digestRes.json()
-
-      articles = (articlesData.articles ?? []) as Article[]
-      digest = (digestData.digest ?? null) as Digest | null
-
-      // Count unsummarized articles
-      unsummarizedCount = articles.filter((a) => !a.summary).length
-    } catch (e) {
-      console.error('Failed to fetch data', e)
-      articles = []
-      digest = null
-    } finally {
-      loading = false
-    }
-  }
 
   // Also fetch sources client-side
   async function fetchSources() {
@@ -90,7 +57,7 @@
   // Trigger on mount and when currentDate changes
   $effect(() => {
     if (browser) {
-      fetchData(data.currentDate)
+      articleCache.loadDate(data.currentDate)
     }
   })
 
@@ -115,12 +82,10 @@
           failed: result.failed ?? 0,
           enqueued: result.enqueued ?? 0,
         }
-        // Hide button immediately — articles are enqueued, no need to click again
-        unsummarizedCount = 0
         // Reload data after a short delay to pick up any instant resummarizations
-        setTimeout(() => fetchData(data.currentDate), 1500)
+        setTimeout(() => articleCache.forceRefresh(data.currentDate), 1500)
         // Also reload again after queue processing might have completed
-        setTimeout(() => fetchData(data.currentDate), 10000)
+        setTimeout(() => articleCache.forceRefresh(data.currentDate), 10000)
       }
     } catch (e) {
       console.error('Resummarize failed', e)
@@ -135,6 +100,17 @@
   })
 
   let isToday = $derived(data.currentDate === todayStr)
+
+  // Brief cooldown when transitioning to today to prevent accidental refresh clicks
+  let refreshCooldown = $state(false)
+  let prevIsToday = $state(false)
+  $effect(() => {
+    if (isToday && !prevIsToday) {
+      refreshCooldown = true
+      setTimeout(() => (refreshCooldown = false), 400)
+    }
+    prevIsToday = isToday
+  })
 
   let formattedDate = $derived.by(() => {
     const d = new Date(`${data.currentDate}T00:00:00`)
@@ -314,10 +290,29 @@
         </CusButton>
         <CusButton class="h-10 w-24 text-sm">{formattedDate}</CusButton>
         <CusButton
-          onclick={() => goToDate(1)}
+          onclick={() => isToday ? articleCache.forceRefresh(data.currentDate) : goToDate(1)}
           class="size-10"
-          disabled={isToday}
-          ><ChevronRight class="translate-x-px" size={20} />
+          disabled={isToday && (articleCache.refreshing || refreshCooldown)}
+        >
+          <div class="grid place-items-center">
+            {#if isToday}
+              <div
+                class="col-start-1 row-start-1"
+                in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+                out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+              >
+                <RefreshCw size={16} class={articleCache.refreshing || articleCache.loadingMore ? 'animate-spin' : ''} />
+              </div>
+            {:else}
+              <div
+                class="col-start-1 row-start-1"
+                in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+                out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+              >
+                <ChevronRight class="translate-x-px" size={20} />
+              </div>
+            {/if}
+          </div>
         </CusButton>
       </div>
       <div class="flex gap-3">
@@ -612,10 +607,29 @@
           </CusButton>
           <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton>
           <CusButton
-            onclick={() => goToDate(1)}
+            onclick={() => isToday ? articleCache.forceRefresh(data.currentDate) : goToDate(1)}
             class="size-8"
-            disabled={isToday}
-            ><ChevronRight class="translate-x-px" size={20} />
+            disabled={isToday && (articleCache.refreshing || refreshCooldown)}
+          >
+            <div class="grid place-items-center">
+              {#if isToday}
+                <div
+                  class="col-start-1 row-start-1"
+                  in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+                  out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                >
+                  <RefreshCw size={14} class={articleCache.refreshing || articleCache.loadingMore ? 'animate-spin' : ''} />
+                </div>
+              {:else}
+                <div
+                  class="col-start-1 row-start-1"
+                  in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
+                  out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                >
+                  <ChevronRight class="translate-x-px" size={20} />
+                </div>
+              {/if}
+            </div>
           </CusButton>
         </div>
         <div class="flex gap-1">

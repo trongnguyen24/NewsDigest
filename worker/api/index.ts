@@ -29,7 +29,7 @@ app.use('/api/*', cors());
 
 app.get('/api/articles', async (c) => {
     const page = parseInt(c.req.query('page') || '1');
-    const limit = Math.min(parseInt(c.req.query('limit') || '20'), 50);
+    const limit = Math.min(parseInt(c.req.query('limit') || '20'), 200);
     const tag = c.req.query('tag') || '';
     const sourceId = c.req.query('source_id') || '';
     const minHot = parseInt(c.req.query('min_hot') || '0');
