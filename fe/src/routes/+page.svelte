@@ -9,11 +9,13 @@
     ChevronLeft,
     ChevronRight,
     ExternalLink,
+    Filter,
     Loader2,
     Moon,
     RefreshCw,
     Sparkles,
     Sun,
+    X,
   } from 'lucide-svelte'
   import type { Article, Digest } from '$lib/types'
   import { sources } from '$lib/stores/sources'
@@ -23,6 +25,7 @@
   import { slideScaleFade } from '$lib/transitions/slideScaleFade'
   import CusButton from '$lib/components/ui/CusButton.svelte'
   import { articleCache } from '$lib/stores/articleCache.svelte'
+  import SourceFilter from '$lib/components/app/SourceFilter.svelte'
 
   let { data } = $props()
 
@@ -164,6 +167,9 @@
 
   let filteredArticles = $derived.by(() => {
     let result: Article[] = articles
+    if ($filters.sourceId) {
+      result = result.filter((a) => a.source_id === $filters.sourceId)
+    }
     if ($filters.tag) {
       result = result.filter((a) => {
         try {
@@ -181,6 +187,37 @@
     }
     return result
   })
+
+  // Auto-select first article when filter changes (desktop)
+  let prevFilterKey = $state('')
+  $effect(() => {
+    const filterKey = `${$filters.sourceId}|${$filters.tag}|${$filters.minHot}`
+    if (filterKey !== prevFilterKey && prevFilterKey !== '') {
+      if (innerWidth >= 768 && filteredArticles.length > 0) {
+        selectedArticle = filteredArticles[0]
+      } else if (innerWidth >= 768) {
+        selectedArticle = null
+      }
+    }
+    prevFilterKey = filterKey
+  })
+
+  let hasActiveFilter = $derived(!!$filters.sourceId || !!$filters.tag)
+  let activeFilterLabel = $derived.by(() => {
+    const parts: string[] = []
+    if ($filters.sourceId) {
+      const name = $sources.find((s) => s.id === $filters.sourceId)?.name
+      if (name) parts.push(name)
+    }
+    if ($filters.tag) parts.push(`#${$filters.tag}`)
+    return parts.join(' · ')
+  })
+
+  function clearFilters() {
+    $filters.sourceId = ''
+    $filters.tag = ''
+  }
+
   let sideView: 'list' | 'digest' = $state('list')
   let selectedArticle: Article | null = $state(null)
 
@@ -345,6 +382,7 @@
         </CusButton>
       </div>
       <div class="flex gap-3">
+        <SourceFilter {articles} size="md" />
         {#if isAdmin && unsummarizedCount > 0}
           <!-- svelte-ignore a11y_consider_explicit_label -->
           <CusButton
@@ -441,6 +479,18 @@
         </CusButton>
       </div>
     </nav>
+
+    <!-- Active filter bar (mobile) -->
+    {#if hasActiveFilter}
+      <div class="flex items-center gap-2 px-4 py-2 bg-blue-50/60 dark:bg-blue-900/10 border-b border-blue-200/40 dark:border-blue-800/30">
+        <Filter size={12} class="text-blue-600 dark:text-blue-400 shrink-0" />
+        <span class="text-xs text-blue-700 dark:text-blue-300 truncate flex-1">{activeFilterLabel}</span>
+        <span class="text-xs text-text-secondary tabular-nums shrink-0">{filteredArticles.length} bài</span>
+        <button onclick={clearFilters} class="text-blue-600 dark:text-blue-400 cursor-pointer shrink-0">
+          <X size={14} />
+        </button>
+      </div>
+    {/if}
 
     <!-- Mobile Article List / Digest (body scroll) -->
     <div class="mobile-content">
@@ -664,6 +714,7 @@
           </CusButton>
         </div>
         <div class="flex gap-1">
+          <SourceFilter {articles} size="sm" />
           {#if isAdmin && unsummarizedCount > 0}
             <!-- svelte-ignore a11y_consider_explicit_label -->
             <CusButton
@@ -767,6 +818,17 @@
         options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
         class="px-6 py-24"
       >
+        <!-- Active filter bar (desktop) -->
+        {#if hasActiveFilter}
+          <div class="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200/40 dark:border-blue-800/30">
+            <Filter size={12} class="text-blue-600 dark:text-blue-400 shrink-0" />
+            <span class="text-xs text-blue-700 dark:text-blue-300 truncate flex-1">{activeFilterLabel}</span>
+            <span class="text-xs text-text-secondary tabular-nums shrink-0">{filteredArticles.length}</span>
+            <button onclick={clearFilters} class="text-blue-600 dark:text-blue-400 cursor-pointer shrink-0 hover:text-blue-800 dark:hover:text-blue-200 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+        {/if}
         {#if loading}
           <!-- Loading skeleton -->
           <div class="flex flex-col gap-8 animate-pulse">
