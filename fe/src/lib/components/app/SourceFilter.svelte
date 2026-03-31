@@ -68,6 +68,7 @@
     } else {
       $filters.sourceId = sourceId
     }
+    open = false
   }
 
   function selectTag(tag: string) {
@@ -76,6 +77,7 @@
     } else {
       $filters.tag = tag
     }
+    open = false
   }
 
   function clearAll() {

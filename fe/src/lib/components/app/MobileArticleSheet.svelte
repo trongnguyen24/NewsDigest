@@ -28,10 +28,15 @@
   let isDragging = $state(false)
   let startY = $state(0)
   let currentTranslateY = $state(0)
+  let dragStartTime = $state(0)
+  let previousTranslateY = $state(0)
+  let previousMoveTime = $state(0)
+  let instantVelocity = $state(0)
   let animationFrameId = $state<number | null>(null)
   let pendingBodyDrag = $state(false)
   let bodyStartY = $state(0)
   const touchMoveOptions: AddEventListenerOptions = { passive: false }
+  const velocityCloseThreshold = 0.7 // px/ms
 
   let currentIndex = $derived.by(() => {
     if (!selectedArticle) return -1
@@ -89,6 +94,10 @@
     isDragging = true
     pendingBodyDrag = false
     startY = getPageY(e)
+    dragStartTime = performance.now()
+    previousTranslateY = 0
+    previousMoveTime = dragStartTime
+    instantVelocity = 0
     currentTranslateY = 0
     drawerPanel.style.transition = 'none'
     drawerBackdrop.style.transition = 'none'
@@ -106,7 +115,12 @@
 
     const currentY = getPageY(e)
     const deltaY = Math.max(0, currentY - startY)
+    const now = performance.now()
+    const dt = Math.max(1, now - previousMoveTime)
+    instantVelocity = Math.max(0, deltaY - previousTranslateY) / dt
     currentTranslateY = deltaY
+    previousTranslateY = deltaY
+    previousMoveTime = now
 
     if (!animationFrameId) {
       animationFrameId = requestAnimationFrame(() => {
@@ -135,7 +149,16 @@
     drawerPanel.style.transition = ''
     drawerBackdrop.style.transition = ''
 
-    if (currentTranslateY > drawerPanel.offsetHeight / 4) {
+    const panelHeight = drawerPanel.offsetHeight || 1
+    const distanceThreshold = panelHeight / 4
+    const nowEnd = performance.now()
+    const elapsed = Math.max(1, nowEnd - dragStartTime)
+    const avgVelocity = currentTranslateY / elapsed
+    const shouldCloseByVelocity =
+      avgVelocity >= velocityCloseThreshold ||
+      instantVelocity >= velocityCloseThreshold
+
+    if (currentTranslateY > distanceThreshold || shouldCloseByVelocity) {
       requestClose()
       return
     }
@@ -212,7 +235,7 @@
     role="dialog"
     aria-modal="true"
     aria-label="Chi tiết bài viết"
-    class="fixed inset-x-0 bottom-0 max-h-[90svh] rounded-t-3xl border border-b-0 border-border bg-bg-2 shadow-2xl pointer-events-none flex flex-col"
+    class="fixed inset-x-0 bottom-0 h-[88svh] max-h-[88svh] rounded-t-4xl border border-b-0 border-border bg-bg-2 shadow-2xl pointer-events-none flex flex-col"
     style="transform: translateY(100%);"
   >
     <div
@@ -261,7 +284,9 @@
         ontouchend={onBodyTouchEnd}
         ontouchcancel={onBodyTouchEnd}
       >
-        <h1 class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6">
+        <h1
+          class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6"
+        >
           {@html selectedArticle.title}
         </h1>
         <div
