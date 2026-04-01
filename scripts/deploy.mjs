@@ -90,7 +90,7 @@ run('npx', [
   'wrangler',
   'pages',
   'deploy',
-  'fe/build',
+  'fe/.svelte-kit/cloudflare',
   '--project-name',
   env.PAGES_PROJECT_NAME,
   '--commit-dirty=true',

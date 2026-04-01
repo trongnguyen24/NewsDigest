@@ -260,12 +260,20 @@ async function loadDate(date: string) {
     // Bail if user navigated away during fetch
     if (_currentDate !== date) return;
 
-    _articles = articlesResult.articles;
+    // Sort by published_at DESC immediately to match backgroundLoadRemaining order
+    // and prevent visible reorder when remaining articles load
+    const sortedArticles = [...articlesResult.articles].sort((a, b) => {
+      const da = a.published_at || a.fetched_at;
+      const db = b.published_at || b.fetched_at;
+      return new Date(db).getTime() - new Date(da).getTime();
+    });
+
+    _articles = sortedArticles;
     _digest = digestResult;
 
     // Save to caches
     const cacheData: CachedDayData = {
-      articles: articlesResult.articles,
+      articles: sortedArticles,
       total: articlesResult.total,
       fullyLoaded: articlesResult.nextPage === null,
       timestamp: Date.now(),

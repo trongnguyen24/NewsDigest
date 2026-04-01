@@ -33,7 +33,7 @@ app.get('/api/articles', async (c) => {
     const tag = c.req.query('tag') || '';
     const sourceId = c.req.query('source_id') || '';
     const minHot = parseInt(c.req.query('min_hot') || '0');
-    const sort = c.req.query('sort') === 'hot' ? 'hot_score DESC' : 'fetched_at DESC';
+    const sort = c.req.query('sort') === 'hot' ? 'hot_score DESC' : 'published_at DESC';
 
     const unsummarized = c.req.query('unsummarized');
     const compact = c.req.query('compact');
