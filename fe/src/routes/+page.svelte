@@ -627,7 +627,7 @@
               >
                 {@html article.title}
               </h3>
-              <p class="text-[0.875em] text-text-secondary leading-relaxed">
+              <p class="text-[0.875em] text-text-secondary leading-relaxed line-clamp-10 wrap-break-word">
                 {article.description_vn ||
                   article.description ||
                   article.summary
@@ -919,7 +919,7 @@
                 >
                   {@html article.title}
                 </h3>
-                <p class="text-[0.875em] text-text-secondary leading-relaxed">
+                <p class="text-[0.875em] text-text-secondary leading-relaxed line-clamp-10 wrap-break-word">
                   {article.description_vn ||
                     article.description ||
                     article.summary
