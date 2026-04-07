@@ -49,14 +49,16 @@
 
       // Persist font size & apply CSS custom property
       localStorage.setItem('fontSize', String($prefs.fontSize))
-      document.documentElement.style.setProperty('--font-size-base', `${$prefs.fontSize}px`)
+      document.documentElement.style.setProperty(
+        '--font-size-base',
+        `${$prefs.fontSize}px`,
+      )
     }
   })
 </script>
 
 <div
-  class="min-h-screen"
-  style="background: linear-gradient(to right, var(--color-bg-1) 65%, var(--color-bg-2) 65%);"
+  class="min-h-screen bg-bg-1 sm:bg-linear-to-r sm:from-bg-1 sm:from-65% sm:to-bg-2 sm:to-65%"
 >
   {@render children()}
 </div>
