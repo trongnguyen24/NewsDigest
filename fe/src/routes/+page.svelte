@@ -5,6 +5,7 @@
   import { filters } from '$lib/stores/articles'
   import { prefs, cycleFontSize } from '$lib/stores/prefs'
   import {
+    CaseSensitive,
     ChevronLeft,
     ChevronRight,
     Clock,
@@ -429,89 +430,13 @@
         </CusButton>
       </div>
       <div class="flex gap-3">
-        <SourceFilter {articles} size="md" />
-        {#if isAdmin && unsummarizedCount > 0}
-          <!-- svelte-ignore a11y_consider_explicit_label -->
-          <CusButton
-            onclick={handleResummarize}
-            disabled={resummarizing}
-            class="size-10 px-2 text-xs gap-1"
-          >
-            {#if resummarizing}
-              <Loader2 size={14} class="animate-spin" />
-            {:else}
-              <Sparkles size={14} />
-            {/if}
-            <span
-              >{resummarizing
-                ? 'Đang xử lý...'
-                : `AI (${unsummarizedCount})`}</span
-            >
-          </CusButton>
-        {/if}
         <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
-          onclick={() => {
-            sideView = sideView === 'digest' ? 'list' : 'digest'
-          }}
+          onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
           class="size-10"
+          title="Đổi cỡ chữ"
         >
-          <div class="grid place-items-center">
-            {#if sideView === 'digest'}
-              <div
-                class="col-start-1 row-start-1"
-                in:slideScaleFade={{
-                  duration: 250,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-                out:slideScaleFade={{
-                  duration: 200,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  class="size-5"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
-              </div>
-            {:else}
-              <div
-                class="col-start-1 row-start-1"
-                in:slideScaleFade={{
-                  duration: 250,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-                out:slideScaleFade={{
-                  duration: 200,
-                  startScale: 0.5,
-                  startOpacity: 0,
-                }}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                >
-                  <path
-                    fill="currentColor"
-                    d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z"
-                  />
-                </svg>
-              </div>
-            {/if}
-          </div>
+          <CaseSensitive size={18} />
         </CusButton>
         <!-- svelte-ignore a11y_consider_explicit_label -->
         <CusButton
@@ -526,6 +451,93 @@
         </CusButton>
       </div>
     </nav>
+    <div class=" fixed z-40 flex gap-3 bottom-6 right-4">
+      {#if isAdmin && unsummarizedCount > 0}
+        <!-- svelte-ignore a11y_consider_explicit_label -->
+        <CusButton
+          onclick={handleResummarize}
+          disabled={resummarizing}
+          class="size-10 px-2 text-xs gap-1"
+        >
+          {#if resummarizing}
+            <Loader2 size={14} class="animate-spin" />
+          {:else}
+            <Sparkles size={14} />
+          {/if}
+          <span
+            >{resummarizing
+              ? 'Đang xử lý...'
+              : `AI (${unsummarizedCount})`}</span
+          >
+        </CusButton>
+      {/if}
+      <!-- svelte-ignore a11y_consider_explicit_label -->
+      <CusButton
+        onclick={() => {
+          sideView = sideView === 'digest' ? 'list' : 'digest'
+        }}
+        class="size-10"
+      >
+        <div class="grid place-items-center">
+          {#if sideView === 'digest'}
+            <div
+              class="col-start-1 row-start-1"
+              in:slideScaleFade={{
+                duration: 250,
+                startScale: 0.5,
+                startOpacity: 0,
+              }}
+              out:slideScaleFade={{
+                duration: 200,
+                startScale: 0.5,
+                startOpacity: 0,
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                class="size-5"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+          {:else}
+            <div
+              class="col-start-1 row-start-1"
+              in:slideScaleFade={{
+                duration: 250,
+                startScale: 0.5,
+                startOpacity: 0,
+              }}
+              out:slideScaleFade={{
+                duration: 200,
+                startScale: 0.5,
+                startOpacity: 0,
+              }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+              >
+                <path
+                  fill="currentColor"
+                  d="M7.53 1.282a.5.5 0 0 1 .94 0l.478 1.306a7.5 7.5 0 0 0 4.464 4.464l1.305.478a.5.5 0 0 1 0 .94l-1.305.478a7.5 7.5 0 0 0-4.464 4.464l-.478 1.305a.5.5 0 0 1-.94 0l-.478-1.305a7.5 7.5 0 0 0-4.464-4.464L1.282 8.47a.5.5 0 0 1 0-.94l1.306-.478a7.5 7.5 0 0 0 4.464-4.464Z"
+                />
+              </svg>
+            </div>
+          {/if}
+        </div>
+      </CusButton>
+
+      <SourceFilter {articles} size="md" />
+    </div>
 
     <!-- Active filter bar (mobile) -->
     {#if hasActiveFilter}
@@ -957,10 +969,10 @@
           <div class="ml-auto flex gap-1">
             <CusButton
               onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
-              class="size-8 text-xs font-bold"
+              class="size-8"
               title="Đổi cỡ chữ"
             >
-              {$prefs.fontSize}
+              <CaseSensitive size={16} />
             </CusButton>
             <CusButton
               onclick={() => ($prefs.darkMode = !$prefs.darkMode)}
@@ -974,7 +986,10 @@
             </CusButton>
           </div>
         </div>
-        <div class="flex flex-col pb-4 pt-8 gap-4" style="font-size: var(--font-size-base);">
+        <div
+          class="flex flex-col pb-4 pt-8 gap-4"
+          style="font-size: var(--font-size-base);"
+        >
           <div
             class="flex justify-center gap-4 items-center text-[0.75em] text-text-secondary"
           >

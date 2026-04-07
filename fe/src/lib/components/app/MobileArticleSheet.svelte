@@ -9,7 +9,6 @@
   } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import CusButton from '$lib/components/ui/CusButton.svelte'
-  import { prefs, cycleFontSize } from '$lib/stores/prefs'
 
   let {
     open = false,
@@ -309,13 +308,6 @@
           </CusButton>
         </div>
         <div class="flex gap-1">
-          <CusButton
-            onclick={() => ($prefs.fontSize = cycleFontSize($prefs.fontSize))}
-            class="size-8 text-xs font-bold"
-            title="Đổi cỡ chữ"
-          >
-            {$prefs.fontSize}
-          </CusButton>
           <CusButton onclick={requestClose} class="size-8">
             <X size={16} />
           </CusButton>
