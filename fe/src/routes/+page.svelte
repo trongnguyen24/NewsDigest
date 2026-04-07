@@ -7,7 +7,9 @@
   import {
     ChevronLeft,
     ChevronRight,
+    Clock,
     ExternalLink,
+    Link2,
     Loader2,
     Moon,
     RefreshCw,
@@ -82,7 +84,10 @@
       const now = new Date()
       const currentTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-      if (currentTodayStr !== lastKnownToday && data.currentDate === lastKnownToday) {
+      if (
+        currentTodayStr !== lastKnownToday &&
+        data.currentDate === lastKnownToday
+      ) {
         // The calendar day rolled over while the user was viewing "today" → navigate to the new today
         lastKnownToday = currentTodayStr
         goto('/', { invalidateAll: true })
@@ -970,11 +975,42 @@
             </CusButton>
           </div>
         </div>
-        <h1
-          class="font-serif text-xl text-center text-balance md:text-2xl font-bold my-8 leading-[1.2] text-text-main"
-        >
-          {@html selectedArticle.title}
-        </h1>
+        <div class="flex flex-col pb-4 pt-8 gap-4">
+          <div
+            class="flex justify-center gap-4 items-center text-sm text-text-secondary"
+          >
+            <p class="flex items-center gap-1.5">
+              <Clock size={14} />
+              {new Date(
+                selectedArticle.published_at || selectedArticle.fetched_at,
+              ).toLocaleTimeString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+            <a
+              href={selectedArticle.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center gap-1.5 hover:underline underline-offset-4"
+            >
+              <Link2 size={14} />
+              {new URL(selectedArticle.url).hostname.replace('www.', '')}
+            </a>
+          </div>
+          <a
+            href={selectedArticle.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:underline flex justify-center underline-offset-4"
+          >
+            <h1
+              class="font-serif text-xl text-center text-balance md:text-2xl font-bold leading-[1.2] text-text-main inline"
+            >
+              {@html selectedArticle.title}
+            </h1>
+          </a>
+        </div>
 
         <div
           class="prose text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main-2! prose-blockquote:text-text-main-2! prose-code:text-text-main-2! dark:prose-invert max-w-none prose-base prose-headings:mt-8 prose-h2:text-xl prose-h3:text-lg prose-h4:text-lg prose-headings:mb-4 prose-p:leading-relaxed prose-li:leading-relaxed"

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { marked } from 'marked'
-  import { ChevronLeft, ChevronRight, ExternalLink, X } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, Clock, ExternalLink, Link2, X } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import CusButton from '$lib/components/ui/CusButton.svelte'
 
@@ -325,11 +325,38 @@
         ontouchend={onBodyTouchEnd}
         ontouchcancel={onBodyTouchEnd}
       >
-        <h1
-          class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6"
+        <div class="flex justify-center gap-4 items-center text-sm text-text-secondary mb-4">
+          <p class="flex items-center gap-1.5">
+            <Clock size={14} />
+            {new Date(
+              selectedArticle.published_at || selectedArticle.fetched_at,
+            ).toLocaleTimeString('vi-VN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </p>
+          <a
+            href={selectedArticle.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-1.5 hover:underline underline-offset-4"
+          >
+            <Link2 size={14} />
+            {new URL(selectedArticle.url).hostname.replace('www.', '')}
+          </a>
+        </div>
+        <a
+          href={selectedArticle.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:underline flex justify-center underline-offset-4"
         >
-          {@html selectedArticle.title}
-        </h1>
+          <h1
+            class="font-serif text-xl font-bold leading-[1.2] text-text-main mb-6 inline"
+          >
+            {@html selectedArticle.title}
+          </h1>
+        </a>
         <div
           class="prose prose-sm text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main-2! prose-blockquote:text-text-main-2! dark:prose-invert max-w-none prose-headings:mt-6 prose-h2:text-lg prose-h3:text-base prose-headings:mb-3 prose-p:leading-relaxed prose-li:leading-relaxed"
         >
