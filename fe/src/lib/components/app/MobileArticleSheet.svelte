@@ -1,6 +1,13 @@
 <script lang="ts">
   import { marked } from 'marked'
-  import { ChevronLeft, ChevronRight, Clock, ExternalLink, Link2, X } from 'lucide-svelte'
+  import {
+    ChevronLeft,
+    ChevronRight,
+    Clock,
+    ExternalLink,
+    Link2,
+    X,
+  } from 'lucide-svelte'
   import type { Article } from '$lib/types'
   import CusButton from '$lib/components/ui/CusButton.svelte'
 
@@ -325,7 +332,9 @@
         ontouchend={onBodyTouchEnd}
         ontouchcancel={onBodyTouchEnd}
       >
-        <div class="flex justify-center gap-4 items-center text-sm text-text-secondary mb-4">
+        <div
+          class="flex justify-center gap-4 items-center text-xs text-text-secondary mb-4"
+        >
           <p class="flex items-center gap-1.5">
             <Clock size={14} />
             {new Date(

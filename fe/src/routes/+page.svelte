@@ -977,7 +977,7 @@
         </div>
         <div class="flex flex-col pb-4 pt-8 gap-4">
           <div
-            class="flex justify-center gap-4 items-center text-sm text-text-secondary"
+            class="flex justify-center gap-4 items-center text-xs text-text-secondary"
           >
             <p class="flex items-center gap-1.5">
               <Clock size={14} />
