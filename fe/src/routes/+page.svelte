@@ -400,10 +400,10 @@
 
 <!-- ═══════════════ MOBILE LAYOUT ═══════════════ -->
 <div class=" md:hidden">
+  <div
+    class="fixed top-0 left-2 right-2 h-8 pointer-events-none bg-linear-to-b from-10% from-bg-1 to-bg-1/0 z-40"
+  ></div>
   <div class="mobile-layout relative bg-bg-1">
-    <div
-      class="fixed top-0 left-2 right-2 h-6 pointer-events-none bg-linear-to-b from-10% from-bg-1 to-bg-1/0 z-10"
-    ></div>
     <!-- Mobile Top Header / Navigator -->
     <nav class="flex justify-between px-4 py-8">
       <div class="flex gap-3">
