@@ -53,7 +53,7 @@ function pickAlias(env: Env): string {
   return 'default';
 }
 
-function extractJson<T>(raw: string): T {
+export function extractJson<T>(raw: string): T {
   const text = raw.trim();
 
   try {
@@ -75,7 +75,7 @@ function extractJson<T>(raw: string): T {
   throw new Error('Cannot extract JSON from AI response');
 }
 
-async function callGemini(
+export async function callGemini(
   env: Env,
   systemPrompt: string,
   prompt: string,
@@ -120,6 +120,12 @@ async function callGemini(
     return callGemini(env, systemPrompt, prompt, model, attempt + 1);
   }
 
+  // 503 overload → retry same model, then let caller handle fallback
+  if (res.status === 503 && attempt < MAX_RETRIES) {
+    await new Promise((r) => setTimeout(r, 3000 * attempt));
+    return callGemini(env, systemPrompt, prompt, model, attempt + 1);
+  }
+
   if (!res.ok) {
     throw new Error(`Profile AI error [${model}] ${res.status}: ${await res.text()}`);
   }
@@ -157,7 +163,7 @@ function normalizeSelectorArray(value: unknown, maxItems: number): string[] {
   return [...new Set(out)];
 }
 
-function normalizeConfig(input: any): ScraperProfileConfig | null {
+export function normalizeConfig(input: any): ScraperProfileConfig | null {
   const contentSelectors = normalizeSelectorArray(input?.contentSelectors, 8)
     .filter((s) => !isContentSelectorTooGeneric(s));
   const removeSelectors = normalizeSelectorArray(input?.removeSelectors, 20);
@@ -188,7 +194,7 @@ function isListingSelectorTooGeneric(selector: string): boolean {
   return s === 'a' || s === 'body a' || s === 'html a' || s === '*';
 }
 
-function normalizeListingConfig(input: any): ListingProfileConfig | null {
+export function normalizeListingConfig(input: any): ListingProfileConfig | null {
   const linkSelectors = normalizeSelectorArray(input?.linkSelectors, 10)
     .filter((s) => !isListingSelectorTooGeneric(s));
   const removeSelectors = normalizeSelectorArray(input?.removeSelectors, 20);
@@ -226,26 +232,33 @@ export async function generateScraperProfile(
     cleanedHtml.slice(0, 120000),
   ].join('\n\n');
 
-  try {
-    const raw = await callGemini(env, ARTICLE_SYSTEM_PROMPT, prompt, PRIMARY_MODEL);
+  // Try primary model first, fallback on any error
+  async function tryModel(model: string): Promise<ScraperProfileConfig | null> {
+    const raw = await callGemini(env, ARTICLE_SYSTEM_PROMPT, prompt, model);
     const parsed = extractJson<any>(raw);
     const config = normalizeConfig(parsed);
-    if (!config) {
-      // Thử lại với fallback model
-      console.log(`[scraper] primary model failed for ${domain}, trying fallback...`);
-      const rawFallback = await callGemini(env, ARTICLE_SYSTEM_PROMPT, prompt, FALLBACK_MODEL);
-      const parsedFallback = extractJson<any>(rawFallback);
-      const fallbackConfig = normalizeConfig(parsedFallback);
-      if (!fallbackConfig) return null;
-      fallbackConfig.sampleUrl = sampleUrl;
-      return fallbackConfig;
-    }
+    if (!config) return null;
     config.sampleUrl = sampleUrl;
     return config;
-  } catch (err: any) {
-    console.log(`[scraper] profile_ai_error domain=${domain}: ${err.message}`);
-    return null;
   }
+
+  try {
+    const config = await tryModel(PRIMARY_MODEL);
+    if (config) return config;
+    console.log(`[scraper] primary model normalizeConfig failed for ${domain}, trying fallback...`);
+  } catch (err: any) {
+    console.log(`[scraper] primary model error for ${domain}: ${err.message}, trying fallback...`);
+  }
+
+  try {
+    const fallbackConfig = await tryModel(FALLBACK_MODEL);
+    if (fallbackConfig) return fallbackConfig;
+    console.log(`[scraper] fallback model normalizeConfig also failed for ${domain}`);
+  } catch (err: any) {
+    console.log(`[scraper] fallback model error for ${domain}: ${err.message}`);
+  }
+
+  return null;
 }
 
 export async function generateListingProfile(
@@ -264,24 +277,31 @@ export async function generateListingProfile(
     cleanedHtml.slice(0, 120000),
   ].join('\n\n');
 
-  try {
-    const raw = await callGemini(env, LISTING_SYSTEM_PROMPT, prompt, PRIMARY_MODEL);
+  // Try primary model first, fallback on any error
+  async function tryModel(model: string): Promise<ListingProfileConfig | null> {
+    const raw = await callGemini(env, LISTING_SYSTEM_PROMPT, prompt, model);
     const parsed = extractJson<any>(raw);
     const config = normalizeListingConfig(parsed);
-    if (!config) {
-      // Thử lại với fallback model
-      console.log(`[scraper] primary model failed for listing ${domain}, trying fallback...`);
-      const rawFallback = await callGemini(env, LISTING_SYSTEM_PROMPT, prompt, FALLBACK_MODEL);
-      const parsedFallback = extractJson<any>(rawFallback);
-      const fallbackConfig = normalizeListingConfig(parsedFallback);
-      if (!fallbackConfig) return null;
-      fallbackConfig.sampleUrl = sampleUrl;
-      return fallbackConfig;
-    }
+    if (!config) return null;
     config.sampleUrl = sampleUrl;
     return config;
-  } catch (err: any) {
-    console.log(`[scraper] listing_profile_ai_error domain=${domain}: ${err.message}`);
-    return null;
   }
+
+  try {
+    const config = await tryModel(PRIMARY_MODEL);
+    if (config) return config;
+    console.log(`[scraper] primary listing model normalizeConfig failed for ${domain}, trying fallback...`);
+  } catch (err: any) {
+    console.log(`[scraper] primary listing model error for ${domain}: ${err.message}, trying fallback...`);
+  }
+
+  try {
+    const fallbackConfig = await tryModel(FALLBACK_MODEL);
+    if (fallbackConfig) return fallbackConfig;
+    console.log(`[scraper] fallback listing model normalizeConfig also failed for ${domain}`);
+  } catch (err: any) {
+    console.log(`[scraper] fallback listing model error for ${domain}: ${err.message}`);
+  }
+
+  return null;
 }

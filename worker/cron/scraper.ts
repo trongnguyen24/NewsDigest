@@ -429,7 +429,7 @@ async function fetchGitHubTrending(source: Source): Promise<ArticleInput[]> {
   return results.filter(r => r.url && r.title).slice(0, 15);
 }
 
-function normalizeListingProfile(profile: ListingProfileConfig): {
+export function normalizeListingProfile(profile: ListingProfileConfig): {
   linkSelectors: string[];
   removeSelectors: string[];
 } {
@@ -444,7 +444,7 @@ function scoreListingHref(href: string, sourceHost: string): number {
   return href.startsWith('/') ? 60 : 40;
 }
 
-function buildListingArticles(
+export function buildListingArticles(
   candidates: Map<string, { title: string; score: number }>
 ): ArticleInput[] {
   return [...candidates.entries()]
@@ -572,7 +572,7 @@ function pushListingCandidate(
   }
 }
 
-async function extractListingWithSelectorSet(
+export async function extractListingWithSelectorSet(
   html: string,
   selectors: { linkSelectors: string[]; removeSelectors: string[] },
   finalUrl: string,
@@ -738,7 +738,7 @@ interface ExtractResult {
 const MAX_CONTENT_CHARS = 25000;
 
 
-function normalizeProfile(profile: ScraperProfileConfig): SiteProfile {
+export function normalizeProfile(profile: ScraperProfileConfig): SiteProfile {
   return {
     contentSelectors: profile.contentSelectors,
     removeSelectors: profile.removeSelectors,
@@ -787,7 +787,7 @@ function isLikelyNoisyContent(text: string): boolean {
   return hits >= 4;
 }
 
-async function extractFromHtmlWithProfile(html: string, profile: SiteProfile): Promise<ExtractResult> {
+export async function extractFromHtmlWithProfile(html: string, profile: SiteProfile): Promise<ExtractResult> {
   const minLen = profile.minLength ?? 40;
   const paragraphs: string[] = [];
   let currentParagraph = '';
