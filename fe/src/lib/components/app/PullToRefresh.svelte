@@ -20,12 +20,18 @@
   let startY = 0
   let pullDistance = 0
 
+  // Dead zone: pull this many px before indicator starts appearing
+  const DEAD_ZONE = 20
+
   let indicatorEl: HTMLDivElement | undefined = $state()
   let circleEl: SVGCircleElement | undefined = $state()
   let ringEl: SVGSVGElement | undefined = $state()
+  let iconEl: HTMLDivElement | undefined = $state()
 
   const RADIUS = 18
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS
+  // Indicator sits this far above viewport initially
+  const HIDE_Y = -52
 
   function applyResistance(distance: number): number {
     return Math.min(distance * 0.4, 100)
@@ -33,28 +39,44 @@
 
   function updateIndicator(dist: number) {
     if (!indicatorEl || !circleEl) return
-    const progress = Math.min(dist / threshold, 1)
-    indicatorEl.style.opacity = `${progress}`
-    indicatorEl.style.transform = `translateY(${dist - 24}px)`
+
+    // Subtract dead zone — indicator only moves after dead zone passed
+    const effectiveDist = Math.max(0, dist - DEAD_ZONE)
+    const effectiveThreshold = threshold - DEAD_ZONE
+
+    const progress = Math.min(effectiveDist / effectiveThreshold, 1)
+
+    // Position: slide down from hidden position
+    const y = HIDE_Y + effectiveDist
+    indicatorEl.style.transform = `translateY(${y}px)`
 
     // Stroke progress
     const offset = CIRCUMFERENCE * (1 - progress)
     circleEl.style.strokeDashoffset = `${offset}`
+
+    // At 100%, icon color matches stroke
+    if (iconEl) {
+      if (progress >= 1) {
+        iconEl.style.color = 'var(--color-text-main)'
+      } else {
+        iconEl.style.color = 'var(--color-text-secondary)'
+      }
+    }
   }
 
   function hideIndicator(animate: boolean) {
     if (!indicatorEl) return
     if (animate) {
-      indicatorEl.style.transition = 'opacity 0.25s ease, transform 0.25s ease'
+      indicatorEl.style.transition = 'transform 0.3s cubic-bezier(0.2,0,0,1)'
     }
-    indicatorEl.style.opacity = '0'
-    indicatorEl.style.transform = 'translateY(-24px)'
+    indicatorEl.style.transform = `translateY(${HIDE_Y}px)`
     if (animate) {
       setTimeout(() => {
         if (indicatorEl) indicatorEl.style.transition = 'none'
         if (circleEl) circleEl.style.strokeDashoffset = `${CIRCUMFERENCE}`
         if (ringEl) ringEl.classList.remove('ptr-spinning')
-      }, 270)
+        if (iconEl) iconEl.style.color = 'var(--color-text-secondary)'
+      }, 320)
     }
   }
 
@@ -94,7 +116,7 @@
       refreshing = true
       if (circleEl) circleEl.style.strokeDashoffset = '0'
       if (ringEl) ringEl.classList.add('ptr-spinning')
-      updateIndicator(threshold)
+      if (iconEl) iconEl.style.color = 'var(--color-text-main)'
 
       try {
         await onRefresh()
@@ -133,7 +155,6 @@
 >
   <div bind:this={indicatorEl} class="ptr-indicator">
     <div class="ptr-badge">
-      <!-- Outer ring SVG -->
       <svg
         bind:this={ringEl}
         class="ptr-ring"
@@ -141,7 +162,6 @@
         height="44"
         viewBox="0 0 44 44"
       >
-        <!-- Background track -->
         <circle
           cx="22"
           cy="22"
@@ -150,22 +170,20 @@
           stroke="var(--color-border)"
           stroke-width="2"
         />
-        <!-- Progress arc -->
         <circle
           bind:this={circleEl}
           cx="22"
           cy="22"
           r={RADIUS}
           fill="none"
-          stroke="currentColor"
+          stroke="var(--color-text-main)"
           stroke-width="2.5"
           stroke-linecap="round"
           stroke-dasharray={CIRCUMFERENCE}
           stroke-dashoffset={CIRCUMFERENCE}
         />
       </svg>
-      <!-- Center icon -->
-      <div class="ptr-icon">
+      <div bind:this={iconEl} class="ptr-icon">
         <RefreshCw size={16} />
       </div>
     </div>
@@ -189,18 +207,19 @@
     padding-top: 8px;
     pointer-events: none;
     z-index: 50;
-    opacity: 0;
   }
 
   .ptr-badge {
     position: relative;
     width: 44px;
     height: 44px;
+    border-radius: 50%;
+    background: var(--color-bg-btn);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
   }
 
   .ptr-ring {
     transform: rotate(-90deg);
-    color: var(--color-text-main);
   }
 
   .ptr-icon {
@@ -210,6 +229,7 @@
     align-items: center;
     justify-content: center;
     color: var(--color-text-secondary);
+    transition: color 0.15s ease;
   }
 
   :global(.ptr-spinning) {
