@@ -100,7 +100,8 @@ Cấu trúc bắt buộc:
 </rules>
 `;
 
-const MODEL = 'gemini-3.1-flash-lite-preview';
+const PRIMARY_MODEL = 'gemini-3.1-flash-lite-preview';
+const FALLBACK_MODEL = 'gemma-4-31b-it';
 const MAX_RETRIES = 3;
 
 // ── BYOK Alias Rotation ──────────────────────────────────────────────────
@@ -153,14 +154,34 @@ function extractJson<T>(raw: string): T {
   throw new Error(`Cannot extract valid JSON from: ${text.slice(0, 150)}`);
 }
 
-// ── Gemini API Call ────────────────────────────────────────────────────────
+// ── Extract response text (skip thinking parts) ──────────────────────────
+// Gemma models return multi-part responses where parts with `thought: true`
+// are internal reasoning. We need the actual answer part.
+function extractResponseText(data: any): string | null {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts) || parts.length === 0) return null;
+
+  // Find the last non-thinking part (the actual answer)
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (!parts[i].thought && parts[i].text) {
+      return parts[i].text;
+    }
+  }
+
+  // Fallback: return first part with text (even if thinking)
+  return parts[0]?.text ?? null;
+}
+
+// ── Gemini API Call (JSON mode) ────────────────────────────────────────────
 async function callGemini(
   env: Env,
   systemPrompt: string,
   userPrompt: string,
+  model = PRIMARY_MODEL,
   attempt = 1,
+  timeoutMs?: number,
 ): Promise<string> {
-  const url = `${env.AI_GATEWAY_URL}/v1beta/models/${MODEL}:generateContent`;
+  const url = `${env.AI_GATEWAY_URL}/v1beta/models/${model}:generateContent`;
   const alias = pickAlias(env);
 
   const body = {
@@ -173,62 +194,137 @@ async function callGemini(
     },
   };
 
+  const timeout = timeoutMs ?? (model === PRIMARY_MODEL ? 30000 : 60000);
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
-      'cf-aig-byok-alias': alias,   // chọn provider key theo alias
+      'cf-aig-byok-alias': alias,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(timeout),
   });
 
   // Rate-limited → backoff and retry with a different key
   if (res.status === 429) {
-    if (attempt >= MAX_RETRIES) throw new Error('Gemini rate limit (429) after max retries');
+    if (attempt >= MAX_RETRIES) throw new Error(`${model} rate limit (429) after max retries`);
     const wait = attempt * 5000; // 5s, 10s, 15s
-    console.log(`⏳ Gemini 429 — waiting ${wait / 1000}s before retry ${attempt + 1}/${MAX_RETRIES}`);
+    console.log(`⏳ ${model} 429 — waiting ${wait / 1000}s before retry ${attempt + 1}/${MAX_RETRIES}`);
     await new Promise(r => setTimeout(r, wait));
-    return callGemini(env, systemPrompt, userPrompt, attempt + 1);
+    return callGemini(env, systemPrompt, userPrompt, model, attempt + 1, timeoutMs);
   }
 
   if (!res.ok) {
     const err = await res.text().catch(() => '');
-    throw new Error(`Gemini API error ${res.status}: ${err.slice(0, 200)}`);
+    throw new Error(`AI API error [${model}] ${res.status}: ${err.slice(0, 200)}`);
   }
 
   const data: any = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = extractResponseText(data);
   if (!text) throw new Error('Empty Gemini response');
   return text;
 }
 
+// ── Gemini API Call (Plain Text mode — no responseMimeType) ────────────────
+// Dùng cho fallback model (gemma) vì nó không trả JSON chuẩn với responseMimeType
+async function callGeminiPlainText(
+  env: Env,
+  systemPrompt: string,
+  userPrompt: string,
+  model: string,
+  timeoutMs = 60000,
+): Promise<string> {
+  const url = `${env.AI_GATEWAY_URL}/v1beta/models/${model}:generateContent`;
+  const alias = pickAlias(env);
+
+  const body = {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 2048,
+    },
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
+      'cf-aig-byok-alias': alias,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    throw new Error(`AI API error [${model}] ${res.status}: ${err.slice(0, 200)}`);
+  }
+
+  const data: any = await res.json();
+  const text = extractResponseText(data);
+  if (!text) throw new Error(`Empty ${model} response`);
+  return text.trim();
+}
+
+// ── Clean fallback response ───────────────────────────────────────────────
+// Gemma sometimes echoes back instructions or adds meta-commentary.
+// Strip known patterns to get clean content only.
+function cleanFallbackResponse(raw: string): string {
+  let text = raw.trim();
+
+  // Remove lines that echo back task/constraint instructions
+  const echoPatterns = [
+    /^\*?\s*Task:.*$/gm,
+    /^\*?\s*Constraint:.*$/gm,
+    /^\*?\s*Input:.*$/gm,
+    /^\*?\s*Output:.*$/gm,
+    /^Here is the .*:?\s*$/gim,
+    /^Here's the .*:?\s*$/gim,
+    /^Below is .*:?\s*$/gim,
+    /^Dưới đây là .*:?\s*$/gim,
+    /^Đây là .*:?\s*$/gim,
+  ];
+  for (const pattern of echoPatterns) {
+    text = text.replace(pattern, '');
+  }
+
+  // Collapse multiple blank lines
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+
+  return text;
+}
+
 // ── callGeminiWithJsonRetry ────────────────────────────────────────────────
-// Gọi Gemini, parse JSON, nếu lỗi thì gọi lại (tối đa MAX_RETRIES lần)
+// Gọi Gemini (PRIMARY_MODEL only), parse JSON, nếu lỗi thì retry (tối đa MAX_RETRIES lần)
+// Fallback model chạy ở flow riêng biệt (summarizeArticleFallback)
 async function callGeminiWithJsonRetry<T>(
   env: Env,
   systemPrompt: string,
   userPrompt: string,
+  timeoutMs?: number,
 ): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const raw = await callGemini(env, systemPrompt, userPrompt, 1);
+      console.log(`🤖 Attempt ${attempt}/${MAX_RETRIES} using ${PRIMARY_MODEL}`);
+      const raw = await callGemini(env, systemPrompt, userPrompt, PRIMARY_MODEL, 1, timeoutMs);
       const result = extractJson<T>(raw);
       if (attempt > 1) console.log(`✅ JSON valid on attempt ${attempt}`);
       return result;
     } catch (err: any) {
       lastError = err;
-      console.log(`⚠️ Attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+      console.log(`⚠️ Attempt ${attempt}/${MAX_RETRIES} [${PRIMARY_MODEL}] failed: ${err.message}`);
       if (attempt < MAX_RETRIES) {
         await new Promise(r => setTimeout(r, 1000 * attempt)); // 1s, 2s
       }
     }
   }
 
-  throw lastError ?? new Error('callGemini failed after max retries');
+  throw lastError ?? new Error(`AI call failed after ${MAX_RETRIES} retries (${PRIMARY_MODEL})`);
 }
 
 // ── Validate SummaryResult ─────────────────────────────────────────────────
@@ -241,11 +337,69 @@ function validateSummary(result: any): result is SummaryResult {
   );
 }
 
+// ── Multi-Step Fallback (plain text, no JSON) ─────────────────────────────
+// Khi primary model fail → gọi FALLBACK_MODEL 4 lần, mỗi lần hỏi 1 field
+const ALLOWED_TAGS = ['AI', 'Tech', 'Security', 'Business', 'Vietnam', 'World', 'Dev', 'Science', 'Crypto', 'Policy', 'Entertainment'];
+
+async function summarizeArticleFallback(
+  title: string,
+  truncatedContent: string,
+  env: Env,
+): Promise<SummaryResult> {
+  console.log(`🔄 Fallback: using ${FALLBACK_MODEL} multi-step for "${title.slice(0, 60)}"`);
+
+  // Step 1: description_vn
+  const description_vn = cleanFallbackResponse(await callGeminiPlainText(
+    env,
+    'Bạn là trợ lý tóm tắt tin tức. Luôn trả lời bằng tiếng Việt. Chỉ trả về nội dung tóm tắt, KHÔNG lặp lại đề bài, KHÔNG thêm ghi chú hay giải thích.',
+    `Tóm tắt bài viết sau trong 2-3 câu tiếng Việt:\n\n${title}\n\n${truncatedContent}`,
+    FALLBACK_MODEL,
+  ));
+  console.log(`  ✅ Step 1/4 description_vn (${description_vn.length} chars)`);
+
+  // Step 2: summary (markdown)
+  const summary = cleanFallbackResponse(await callGeminiPlainText(
+    env,
+    'Bạn là trợ lý tóm tắt tin tức công nghệ. Luôn viết bằng tiếng Việt. Trả về tóm tắt dạng Markdown có cấu trúc. Giữ nguyên thuật ngữ kỹ thuật (AI, API, LLM, v.v.). KHÔNG lặp lại đề bài, KHÔNG thêm ghi chú.',
+    `Viết tóm tắt chi tiết bằng Markdown cho bài viết sau. Dùng ## cho heading, - cho bullet point, **bold** cho từ khóa quan trọng.\n\n${title}\n\n${truncatedContent}`,
+    FALLBACK_MODEL,
+  ));
+  console.log(`  ✅ Step 2/4 summary (${summary.length} chars)`);
+
+  // Step 3: hot_score
+  const scoreRaw = await callGeminiPlainText(
+    env,
+    'Bạn là chuyên gia đánh giá tin tức tech. Chỉ trả về DUY NHẤT 1 con số từ 1 đến 10. Không giải thích.',
+    `Chấm điểm mức độ quan trọng (1=thấp, 10=rất hot):\n\n${title}\n${description_vn}`,
+    FALLBACK_MODEL,
+  );
+  const scoreMatch = scoreRaw.match(/\d+/);
+  const hot_score = Math.max(1, Math.min(10, scoreMatch ? parseInt(scoreMatch[0], 10) : 5));
+  console.log(`  ✅ Step 3/4 hot_score = ${hot_score} (raw: "${scoreRaw.slice(0, 30)}")`);
+
+  // Step 4: tags
+  const tagsRaw = await callGeminiPlainText(
+    env,
+    `Bạn là hệ thống gắn tag. Chỉ trả về các tag cách nhau bởi dấu phẩy. KHÔNG giải thích. Tags hợp lệ: ${ALLOWED_TAGS.join(', ')}`,
+    `Chọn tối đa 3 tags phù hợp nhất:\n\n${title}\n${description_vn}`,
+    FALLBACK_MODEL,
+  );
+  const tags = tagsRaw
+    .split(',')
+    .map(t => t.trim().replace(/[^a-zA-Z]/g, ''))
+    .filter(t => ALLOWED_TAGS.includes(t))
+    .slice(0, 3);
+  console.log(`  ✅ Step 4/4 tags = [${tags.join(', ')}]`);
+
+  console.log(`✅ Fallback complete for "${title.slice(0, 60)}"`);
+  return { description_vn, summary, hot_score, tags };
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
  * Tóm tắt + score + tag cho 1 bài viết.
- * Có retry JSON và key rotation tự động.
+ * Thử primary model (JSON) trước → nếu fail → fallback multi-step (plain text).
  */
 export async function summarizeArticle(
   title: string,
@@ -255,26 +409,54 @@ export async function summarizeArticle(
   const truncated = content.length > 3000 ? content.slice(0, 3000) + '...' : content;
   const userPrompt = `Tiêu đề: ${title}\n\nNội dung:\n${truncated}`;
 
+  // ── Try primary model (JSON mode) ──
   try {
     const result = await callGeminiWithJsonRetry<SummaryResult>(env, SYSTEM_PROMPT, userPrompt);
 
     if (!validateSummary(result)) {
       console.log(`⚠️ Invalid AI structure for "${title}": ${JSON.stringify(result).slice(0, 100)}`);
-      return null;
+      // Structure invalid → try fallback
+      throw new Error('Invalid primary model response structure');
     }
 
     result.hot_score = Math.max(1, Math.min(10, Math.round(result.hot_score)));
     result.tags = result.tags.slice(0, 3).map(String);
     return result;
-  } catch (err: any) {
-    console.error(`❌ AI summarize failed for "${title}": ${err.message}`);
-    throw err;
+  } catch (primaryErr: any) {
+    console.log(`⚠️ Primary model failed for "${title}": ${primaryErr.message}`);
+  }
+
+  // ── Try fallback model in JSON mode (1 call, skip thinking parts) ──
+  try {
+    console.log(`🔄 Trying ${FALLBACK_MODEL} JSON mode for "${title.slice(0, 60)}"...`);
+    const raw = await callGemini(env, SYSTEM_PROMPT, userPrompt, FALLBACK_MODEL, 1);
+    const result = extractJson<SummaryResult>(raw);
+
+    if (validateSummary(result)) {
+      result.hot_score = Math.max(1, Math.min(10, Math.round(result.hot_score)));
+      result.tags = result.tags.slice(0, 3).map(String);
+      console.log(`✅ Fallback JSON mode succeeded for "${title.slice(0, 60)}"`);
+      return result;
+    }
+    console.log(`⚠️ Fallback JSON invalid, switching to multi-step...`);
+  } catch (jsonFallbackErr: any) {
+    console.log(`⚠️ Fallback JSON mode failed: ${jsonFallbackErr.message}`);
+    console.log(`🔄 Switching to multi-step fallback...`);
+  }
+
+  // ── Last resort: multi-step plain text ──
+  try {
+    return await summarizeArticleFallback(title, truncated, env);
+  } catch (fallbackErr: any) {
+    console.error(`❌ All strategies failed for "${title}": ${fallbackErr.message}`);
+    throw fallbackErr;
   }
 }
 
 /**
  * Tổng hợp digest từ danh sách bài đã summarized.
  * AI sẽ inline reference bằng <id:uuid> trong digest_text.
+ * Flow: primary JSON → fallback JSON (skip thinking) → fallback plain text.
  */
 export async function generateDigest(
   articles: { id: string; title: string; summary: string; hot_score: number }[],
@@ -287,17 +469,59 @@ export async function generateDigest(
     .join('\n---\n');
   const userPrompt = `Phân tích và tổng hợp ${articles.length} bài viết trong ngày hôm nay:\n\n${formatted}`;
 
-  try {
-    const result = await callGeminiWithJsonRetry<DigestResult>(env, DIGEST_PROMPT, userPrompt);
+  const DIGEST_TIMEOUT = 120000; // 120s — digest prompt lớn hơn (40+ bài)
 
-    if (!result.digest_text) {
-      console.log('⚠️ Invalid digest structure');
-      return null;
+  // ── Try primary model (JSON mode) ──
+  try {
+    const result = await callGeminiWithJsonRetry<DigestResult>(env, DIGEST_PROMPT, userPrompt, DIGEST_TIMEOUT);
+    if (result.digest_text) return result;
+    console.log('⚠️ Invalid digest structure from primary');
+  } catch (err: any) {
+    console.log(`⚠️ Primary digest failed: ${err.message}`);
+  }
+
+  // ── Try fallback model in JSON mode (skip thinking parts) ──
+  try {
+    console.log(`🔄 Trying ${FALLBACK_MODEL} JSON mode for digest...`);
+    const raw = await callGemini(env, DIGEST_PROMPT, userPrompt, FALLBACK_MODEL, 1, DIGEST_TIMEOUT);
+    const result = extractJson<DigestResult>(raw);
+    if (result.digest_text) {
+      console.log(`✅ Fallback JSON digest succeeded`);
+      return result;
+    }
+    console.log('⚠️ Fallback JSON digest invalid');
+  } catch (err: any) {
+    console.log(`⚠️ Fallback JSON digest failed: ${err.message}`);
+  }
+
+  // ── Last resort: fallback plain text (digest chỉ cần 1 field) ──
+  try {
+    console.log(`🔄 Trying ${FALLBACK_MODEL} plain text for digest...`);
+    const rawText = cleanFallbackResponse(await callGeminiPlainText(
+      env,
+      DIGEST_PROMPT,
+      userPrompt,
+      FALLBACK_MODEL,
+      DIGEST_TIMEOUT,
+    ));
+
+    // Gemma thường trả JSON cả trong plain text mode → thử parse digest_text ra
+    let digestText = rawText;
+    try {
+      const parsed = extractJson<DigestResult>(rawText);
+      if (parsed.digest_text) digestText = parsed.digest_text;
+    } catch {
+      // Không phải JSON → dùng raw text luôn
     }
 
-    return result;
-  } catch (err: any) {
-    console.error('❌ Digest generation error:', err.message);
-    throw err;
+    if (digestText && digestText.length > 50) {
+      console.log(`✅ Fallback plain text digest succeeded (${digestText.length} chars)`);
+      return { digest_text: digestText };
+    }
+    console.log('⚠️ Fallback plain text digest too short');
+    return null;
+  } catch (fallbackErr: any) {
+    console.error(`❌ All digest strategies failed: ${fallbackErr.message}`);
+    throw fallbackErr;
   }
 }

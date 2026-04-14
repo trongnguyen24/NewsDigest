@@ -1,6 +1,7 @@
 import { Env, ListingProfileConfig, ScraperProfileConfig } from '../types';
 
-const MODEL = 'gemini-3.1-flash-lite-preview';
+const PRIMARY_MODEL = 'gemini-3.1-flash-lite-preview';
+const FALLBACK_MODEL = 'gemma-4-31b-it';
 const MAX_RETRIES = 3;
 
 const ARTICLE_SYSTEM_PROMPT = `
@@ -78,10 +79,11 @@ async function callGemini(
   env: Env,
   systemPrompt: string,
   prompt: string,
+  model = PRIMARY_MODEL,
   attempt = 1
 ): Promise<string> {
   const alias = pickAlias(env);
-  const url = `${env.AI_GATEWAY_URL}/v1beta/models/${MODEL}:generateContent`;
+  const url = `${env.AI_GATEWAY_URL}/v1beta/models/${model}:generateContent`;
 
   let res: Response;
   try {
@@ -101,29 +103,37 @@ async function callGemini(
           responseMimeType: 'application/json',
         },
       }),
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(model === PRIMARY_MODEL ? 25000 : 60000),
     });
   } catch (err: any) {
     // Retry khi network timeout (AbortError / TimeoutError) hoặc lỗi mạng
     const isRetryable = err.name === 'AbortError' || err.name === 'TimeoutError';
     if (isRetryable && attempt < MAX_RETRIES) {
       await new Promise((r) => setTimeout(r, 2000 * attempt));
-      return callGemini(env, systemPrompt, prompt, attempt + 1);
+      return callGemini(env, systemPrompt, prompt, model, attempt + 1);
     }
     throw err;
   }
 
   if (res.status === 429 && attempt < MAX_RETRIES) {
     await new Promise((r) => setTimeout(r, 2000 * attempt));
-    return callGemini(env, systemPrompt, prompt, attempt + 1);
+    return callGemini(env, systemPrompt, prompt, model, attempt + 1);
   }
 
   if (!res.ok) {
-    throw new Error(`Profile AI error ${res.status}: ${await res.text()}`);
+    throw new Error(`Profile AI error [${model}] ${res.status}: ${await res.text()}`);
   }
 
   const data: any = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const parts = data?.candidates?.[0]?.content?.parts;
+  let text: string | undefined;
+  if (Array.isArray(parts)) {
+    // Skip thinking parts (gemma models return thought: true for internal reasoning)
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (!parts[i].thought && parts[i].text) { text = parts[i].text; break; }
+    }
+    if (!text) text = parts[0]?.text;
+  }
   if (!text) throw new Error('Profile AI response empty');
   return text;
 }
@@ -217,10 +227,19 @@ export async function generateScraperProfile(
   ].join('\n\n');
 
   try {
-    const raw = await callGemini(env, ARTICLE_SYSTEM_PROMPT, prompt);
+    const raw = await callGemini(env, ARTICLE_SYSTEM_PROMPT, prompt, PRIMARY_MODEL);
     const parsed = extractJson<any>(raw);
     const config = normalizeConfig(parsed);
-    if (!config) return null;
+    if (!config) {
+      // Thử lại với fallback model
+      console.log(`[scraper] primary model failed for ${domain}, trying fallback...`);
+      const rawFallback = await callGemini(env, ARTICLE_SYSTEM_PROMPT, prompt, FALLBACK_MODEL);
+      const parsedFallback = extractJson<any>(rawFallback);
+      const fallbackConfig = normalizeConfig(parsedFallback);
+      if (!fallbackConfig) return null;
+      fallbackConfig.sampleUrl = sampleUrl;
+      return fallbackConfig;
+    }
     config.sampleUrl = sampleUrl;
     return config;
   } catch (err: any) {
@@ -246,10 +265,19 @@ export async function generateListingProfile(
   ].join('\n\n');
 
   try {
-    const raw = await callGemini(env, LISTING_SYSTEM_PROMPT, prompt);
+    const raw = await callGemini(env, LISTING_SYSTEM_PROMPT, prompt, PRIMARY_MODEL);
     const parsed = extractJson<any>(raw);
     const config = normalizeListingConfig(parsed);
-    if (!config) return null;
+    if (!config) {
+      // Thử lại với fallback model
+      console.log(`[scraper] primary model failed for listing ${domain}, trying fallback...`);
+      const rawFallback = await callGemini(env, LISTING_SYSTEM_PROMPT, prompt, FALLBACK_MODEL);
+      const parsedFallback = extractJson<any>(rawFallback);
+      const fallbackConfig = normalizeListingConfig(parsedFallback);
+      if (!fallbackConfig) return null;
+      fallbackConfig.sampleUrl = sampleUrl;
+      return fallbackConfig;
+    }
     config.sampleUrl = sampleUrl;
     return config;
   } catch (err: any) {
