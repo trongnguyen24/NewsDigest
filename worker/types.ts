@@ -4,9 +4,7 @@ export interface Env {
   CONTENT_QUEUE: Queue;
   YOUTUBE_API_KEY: string;
   RAPIDAPI_KEY: string;
-  AI_GATEWAY_TOKEN: string;   // single token (fallback)
-  AI_GATEWAY_TOKENS?: string;  // comma-separated tokens for rotation
-  AI_GATEWAY_KEY_ALIASES?: string;
+  AI_GATEWAY_TOKEN: string;
   AI_GATEWAY_URL: string;
   ADMIN_API_KEY?: string;
 }

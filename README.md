@@ -45,7 +45,6 @@ AI Gateway routes your Gemini API calls through Cloudflare, providing caching, r
    - **Gateway URL** → looks like `https://gateway.ai.cloudflare.com/v1/<account_id>/<gateway_name>/google-ai-studio`
    - **Auth token** → from gateway settings
 
-> **Tip:** You can add multiple Provider Keys with different aliases for key rotation. Set `AI_GATEWAY_KEY_ALIASES=default,key2,key3` in `.env` to rotate between them automatically.
 
 #### YouTube Data API v3
 
@@ -109,7 +108,6 @@ This deploys the Worker, builds the frontend with the correct API URL, and deplo
 | `YOUTUBE_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) | Fetches latest videos from YouTube channels |
 | `RAPIDAPI_KEY` | [RapidAPI — yt-api](https://rapidapi.com/ytjar/api/yt-api) | Fetches YouTube subtitles/transcripts |
 | `ADMIN_API_KEY` | Self-generated (`openssl rand -hex 32`) | Protects write endpoints (optional) |
-| `AI_GATEWAY_KEY_ALIASES` | Cloudflare AI Gateway → Provider aliases | BYOK key rotation (optional) |
 
 ## Local Development
 

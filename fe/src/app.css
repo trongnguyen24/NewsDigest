@@ -90,6 +90,20 @@
   font-size: var(--font-size-base) !important;
 }
 
+/* Inline code styling for light / dark mode */
+.prose :where(code):not(:where(pre code)) {
+  background-color: hsl(50 10% 88%);
+  color: hsl(60 2.5% 23%);
+  padding: 0.15em 0.35em;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  font-weight: 500;
+}
+.dark .prose :where(code):not(:where(pre code)) {
+  background-color: hsl(60 2% 22%);
+  color: hsl(48 5% 74%);
+}
+
 .dark {
   --background: 222.2 84% 4.9%;
   --foreground: 210 40% 98%;

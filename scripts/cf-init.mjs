@@ -213,7 +213,6 @@ upsertSecret('AI_GATEWAY_TOKEN', env.AI_GATEWAY_TOKEN);
 upsertSecret('YOUTUBE_API_KEY', env.YOUTUBE_API_KEY);
 upsertSecret('RAPIDAPI_KEY', env.RAPIDAPI_KEY);
 
-if (env.AI_GATEWAY_KEY_ALIASES) upsertSecret('AI_GATEWAY_KEY_ALIASES', env.AI_GATEWAY_KEY_ALIASES);
 if (env.ADMIN_API_KEY) upsertSecret('ADMIN_API_KEY', env.ADMIN_API_KEY);
 
 if (env.WORKER_PUBLIC_URL) {

@@ -21,7 +21,7 @@ Personal PWA that aggregates tech news (RSS, Reddit, YouTube, VOZ, GitHub Trendi
 | Backend / API | Cloudflare Workers + Hono router |
 | Database | Cloudflare D1 (SQLite) |
 | Queue | Cloudflare Queues |
-| AI | Gemini 3.1 Flash Lite via Cloudflare AI Gateway |
+| AI | Gemma 4 (31B IT + 26B A4B IT) via Cloudflare AI Gateway |
 
 ---
 

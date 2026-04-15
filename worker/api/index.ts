@@ -863,25 +863,18 @@ Rules:
                 prompt_length: prompt.length,
             };
 
-            // Step 1: Call AI (try primary, then fallback)
+            // Step 1: Call AI
             let rawAiResponse: string;
-            let modelUsed = 'gemini-3.1-flash-lite-preview';
+            const modelUsed = 'gemma-4 (auto-selected)';
             try {
                 rawAiResponse = await callGemini(c.env, ARTICLE_SYSTEM_PROMPT, prompt);
-            } catch (primaryErr: any) {
-                debug.primary_error = primaryErr.message;
-                // Try fallback model
-                try {
-                    rawAiResponse = await callGemini(c.env, ARTICLE_SYSTEM_PROMPT, prompt, 'gemma-4-31b-it');
-                    modelUsed = 'gemma-4-31b-it';
-                } catch (fallbackErr: any) {
-                    return c.json({
-                        ok: false, domain, mode,
-                        step_failed: 'callGemini',
-                        error: `Primary: ${primaryErr.message} | Fallback: ${fallbackErr.message}`,
-                        debug,
-                    });
-                }
+            } catch (err: any) {
+                return c.json({
+                    ok: false, domain, mode,
+                    step_failed: 'callGemini',
+                    error: err.message,
+                    debug,
+                });
             }
             debug.model_used = modelUsed;
             debug.ai_raw_response = rawAiResponse.slice(0, 2000);
@@ -996,24 +989,18 @@ Rules:
                 cleaned_html_length: cleanedHtml.length,
             };
 
-            // Step 1: Call AI (try primary, then fallback)
+            // Step 1: Call AI
             let rawAiResponse: string;
-            let modelUsed = 'gemini-3.1-flash-lite-preview';
+            const modelUsed = 'gemma-4 (auto-selected)';
             try {
                 rawAiResponse = await callGemini(c.env, LISTING_SYSTEM_PROMPT, prompt);
-            } catch (primaryErr: any) {
-                debug.primary_error = primaryErr.message;
-                try {
-                    rawAiResponse = await callGemini(c.env, LISTING_SYSTEM_PROMPT, prompt, 'gemma-4-31b-it');
-                    modelUsed = 'gemma-4-31b-it';
-                } catch (fallbackErr: any) {
-                    return c.json({
-                        ok: false, domain, mode,
-                        step_failed: 'callGemini',
-                        error: `Primary: ${primaryErr.message} | Fallback: ${fallbackErr.message}`,
-                        debug,
-                    });
-                }
+            } catch (err: any) {
+                return c.json({
+                    ok: false, domain, mode,
+                    step_failed: 'callGemini',
+                    error: err.message,
+                    debug,
+                });
             }
             debug.model_used = modelUsed;
             debug.ai_raw_response = rawAiResponse.slice(0, 2000);

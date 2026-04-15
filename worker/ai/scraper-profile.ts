@@ -1,8 +1,16 @@
 import { Env, ListingProfileConfig, ScraperProfileConfig } from '../types';
 
-const PRIMARY_MODEL = 'gemini-3.1-flash-lite-preview';
-const FALLBACK_MODEL = 'gemma-4-31b-it';
+// Hai model Gemma 4 cùng rate limit → gấp đôi throughput
+const MODELS = ['gemma-4-31b-it', 'gemma-4-26b-a4b-it'] as const;
 const MAX_RETRIES = 3;
+
+function pickModel(): string {
+  return MODELS[Math.floor(Math.random() * MODELS.length)];
+}
+
+function getOtherModel(current: string): string {
+  return current === MODELS[0] ? MODELS[1] : MODELS[0];
+}
 
 const ARTICLE_SYSTEM_PROMPT = `
 You are an expert web scraping engineer.
@@ -42,16 +50,7 @@ Rules:
 - Do not include markdown, explanations, or extra keys.
 `;
 
-function pickAlias(env: Env): string {
-  const aliases = ((env as any).AI_GATEWAY_KEY_ALIASES as string | undefined)
-    ?.split(',')
-    .map((a: string) => a.trim())
-    .filter(Boolean);
-  if (aliases && aliases.length > 0) {
-    return aliases[Math.floor(Math.random() * aliases.length)];
-  }
-  return 'default';
-}
+
 
 export function extractJson<T>(raw: string): T {
   const text = raw.trim();
@@ -79,10 +78,9 @@ export async function callGemini(
   env: Env,
   systemPrompt: string,
   prompt: string,
-  model = PRIMARY_MODEL,
+  model = pickModel(),
   attempt = 1
 ): Promise<string> {
-  const alias = pickAlias(env);
   const url = `${env.AI_GATEWAY_URL}/v1beta/models/${model}:generateContent`;
 
   let res: Response;
@@ -92,7 +90,7 @@ export async function callGemini(
       headers: {
         'Content-Type': 'application/json',
         'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
-        'cf-aig-byok-alias': alias,
+        'cf-aig-byok-alias': 'default',
       },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -103,27 +101,30 @@ export async function callGemini(
           responseMimeType: 'application/json',
         },
       }),
-      signal: AbortSignal.timeout(model === PRIMARY_MODEL ? 25000 : 60000),
+      signal: AbortSignal.timeout(60000),
     });
   } catch (err: any) {
     // Retry khi network timeout (AbortError / TimeoutError) hoặc lỗi mạng
     const isRetryable = err.name === 'AbortError' || err.name === 'TimeoutError';
     if (isRetryable && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
       return callGemini(env, systemPrompt, prompt, model, attempt + 1);
     }
     throw err;
   }
 
   if (res.status === 429 && attempt < MAX_RETRIES) {
-    await new Promise((r) => setTimeout(r, 2000 * attempt));
-    return callGemini(env, systemPrompt, prompt, model, attempt + 1);
+    const nextModel = getOtherModel(model);
+    console.log(`⏳ ${model} 429 → switching to ${nextModel}`);
+    await new Promise((r) => setTimeout(r, 1000 * attempt));
+    return callGemini(env, systemPrompt, prompt, nextModel, attempt + 1);
   }
 
-  // 503 overload → retry same model, then let caller handle fallback
+  // 503 overload → switch model and retry
   if (res.status === 503 && attempt < MAX_RETRIES) {
-    await new Promise((r) => setTimeout(r, 3000 * attempt));
-    return callGemini(env, systemPrompt, prompt, model, attempt + 1);
+    const nextModel = getOtherModel(model);
+    await new Promise((r) => setTimeout(r, 1000 * attempt));
+    return callGemini(env, systemPrompt, prompt, nextModel, attempt + 1);
   }
 
   if (!res.ok) {
@@ -134,7 +135,7 @@ export async function callGemini(
   const parts = data?.candidates?.[0]?.content?.parts;
   let text: string | undefined;
   if (Array.isArray(parts)) {
-    // Skip thinking parts (gemma models return thought: true for internal reasoning)
+    // Skip thinking parts (model returns thought: true for internal reasoning)
     for (let i = parts.length - 1; i >= 0; i--) {
       if (!parts[i].thought && parts[i].text) { text = parts[i].text; break; }
     }
@@ -232,33 +233,20 @@ export async function generateScraperProfile(
     cleanedHtml.slice(0, 120000),
   ].join('\n\n');
 
-  // Try primary model first, fallback on any error
-  async function tryModel(model: string): Promise<ScraperProfileConfig | null> {
-    const raw = await callGemini(env, ARTICLE_SYSTEM_PROMPT, prompt, model);
+  try {
+    const raw = await callGemini(env, ARTICLE_SYSTEM_PROMPT, prompt);
     const parsed = extractJson<any>(raw);
     const config = normalizeConfig(parsed);
-    if (!config) return null;
+    if (!config) {
+      console.log(`[scraper] normalizeConfig failed for ${domain}`);
+      return null;
+    }
     config.sampleUrl = sampleUrl;
     return config;
-  }
-
-  try {
-    const config = await tryModel(PRIMARY_MODEL);
-    if (config) return config;
-    console.log(`[scraper] primary model normalizeConfig failed for ${domain}, trying fallback...`);
   } catch (err: any) {
-    console.log(`[scraper] primary model error for ${domain}: ${err.message}, trying fallback...`);
+    console.log(`[scraper] AI error for ${domain}: ${err.message}`);
+    return null;
   }
-
-  try {
-    const fallbackConfig = await tryModel(FALLBACK_MODEL);
-    if (fallbackConfig) return fallbackConfig;
-    console.log(`[scraper] fallback model normalizeConfig also failed for ${domain}`);
-  } catch (err: any) {
-    console.log(`[scraper] fallback model error for ${domain}: ${err.message}`);
-  }
-
-  return null;
 }
 
 export async function generateListingProfile(
@@ -277,31 +265,18 @@ export async function generateListingProfile(
     cleanedHtml.slice(0, 120000),
   ].join('\n\n');
 
-  // Try primary model first, fallback on any error
-  async function tryModel(model: string): Promise<ListingProfileConfig | null> {
-    const raw = await callGemini(env, LISTING_SYSTEM_PROMPT, prompt, model);
+  try {
+    const raw = await callGemini(env, LISTING_SYSTEM_PROMPT, prompt);
     const parsed = extractJson<any>(raw);
     const config = normalizeListingConfig(parsed);
-    if (!config) return null;
+    if (!config) {
+      console.log(`[scraper] listing normalizeConfig failed for ${domain}`);
+      return null;
+    }
     config.sampleUrl = sampleUrl;
     return config;
-  }
-
-  try {
-    const config = await tryModel(PRIMARY_MODEL);
-    if (config) return config;
-    console.log(`[scraper] primary listing model normalizeConfig failed for ${domain}, trying fallback...`);
   } catch (err: any) {
-    console.log(`[scraper] primary listing model error for ${domain}: ${err.message}, trying fallback...`);
+    console.log(`[scraper] listing AI error for ${domain}: ${err.message}`);
+    return null;
   }
-
-  try {
-    const fallbackConfig = await tryModel(FALLBACK_MODEL);
-    if (fallbackConfig) return fallbackConfig;
-    console.log(`[scraper] fallback listing model normalizeConfig also failed for ${domain}`);
-  } catch (err: any) {
-    console.log(`[scraper] fallback listing model error for ${domain}: ${err.message}`);
-  }
-
-  return null;
 }

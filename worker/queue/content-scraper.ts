@@ -332,7 +332,7 @@ export async function handleContentQueue(
     } catch (err: any) {
       console.error(`❌ Failed to scrape ${url}:`, err);
       if (err.message && err.message.includes('429')) {
-        message.retry({ delaySeconds: 65 });
+        message.retry({ delaySeconds: 30 });
       } else {
         message.retry();
       }
