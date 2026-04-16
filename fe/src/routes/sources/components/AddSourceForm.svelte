@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Input } from '$lib/components/ui/input'
   import CusButton from '$lib/components/ui/CusButton.svelte'
   import { Loader2, Link2, Plus } from 'lucide-svelte'
   import { getTypeIcon, type SourcePreview } from './utils'
@@ -35,15 +34,15 @@
     Thêm nguồn mới
   </p>
   <div class="flex flex-col sm:flex-row gap-2">
-    <Input
+    <input
       bind:value={newUrl}
       placeholder="URL nguồn (RSS, Reddit, YouTube, blog...)"
-      class="h-10 flex-1 rounded-xl border-border/60 bg-transparent px-3.5 text-sm"
+      class="h-10 flex-1 rounded-xl border border-border/60 bg-transparent px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
     />
-    <Input
+    <input
       bind:value={newName}
       placeholder="Tên (tuỳ chọn)"
-      class="h-10 w-full sm:w-36 rounded-xl border-border/60 bg-transparent px-3.5 text-sm"
+      class="h-10 w-full sm:w-36 rounded-xl border border-border/60 bg-transparent px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
     />
     <div class="flex gap-2">
       <CusButton

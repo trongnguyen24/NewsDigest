@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { prefs } from '$lib/stores/prefs'
-  import { Toaster } from '$lib/components/ui/sonner'
+  import { Toaster } from 'svelte-sonner'
   import '../app.css'
   import 'overlayscrollbars/overlayscrollbars.css'
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'

@@ -8,11 +8,7 @@
     MoreVertical,
   } from 'lucide-svelte'
   import Switch from '$lib/components/app/Switch.svelte'
-  import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-  } from '$lib/components/ui/popover'
+  import { Popover } from 'bits-ui'
 
   let {
     source,
@@ -141,8 +137,8 @@
 
         <!-- Mobile Dropdown Actions -->
         <div class="md:hidden flex items-center">
-          <Popover bind:open={popoverOpen}>
-            <PopoverTrigger>
+          <Popover.Root bind:open={popoverOpen}>
+            <Popover.Trigger>
               {#snippet child({ props })}
                 <button
                   {...props}
@@ -151,11 +147,12 @@
                   <MoreVertical size={16} />
                 </button>
               {/snippet}
-            </PopoverTrigger>
-            <PopoverContent
+            </Popover.Trigger>
+            <Popover.Portal>
+            <Popover.Content
               align="end"
               sideOffset={8}
-              class="w-48 p-0 flex flex-col rounded-3xl border border-white bg-bg-btn dark:border-white/10 dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)]"
+              class="z-50 w-48 p-0 flex flex-col rounded-3xl border border-white bg-bg-btn dark:border-white/10 dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
             >
               <div class="overflow-y-auto flex flex-col p-1 gap-1">
                 <button
@@ -214,8 +211,9 @@
                   />
                 </div>
               </div>
-            </PopoverContent>
-          </Popover>
+            </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       {:else}
         <span

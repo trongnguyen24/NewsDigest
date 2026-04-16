@@ -1,9 +1,5 @@
 <script lang="ts">
-  import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-  } from '$lib/components/ui/popover'
+  import { Popover } from 'bits-ui'
   import { filters } from '$lib/stores/articles'
   import { sources } from '$lib/stores/sources'
   import { Filter, Check, X } from 'lucide-svelte'
@@ -87,8 +83,8 @@
   }
 </script>
 
-<Popover bind:open>
-  <PopoverTrigger>
+<Popover.Root bind:open>
+  <Popover.Trigger>
     {#snippet child({ props })}
       <CusButton
         {...props}
@@ -104,11 +100,12 @@
         </div>
       </CusButton>
     {/snippet}
-  </PopoverTrigger>
-  <PopoverContent
+  </Popover.Trigger>
+  <Popover.Portal>
+  <Popover.Content
     align="end"
     sideOffset={8}
-    class="w-72 p-0 max-h-[70vh] flex flex-col rounded-3xl border border-white bg-bg-btn dark:border-white/10  dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)]"
+    class="z-50 w-72 p-0 max-h-[70vh] flex flex-col rounded-3xl border border-white bg-bg-btn dark:border-white/10 dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
   >
     <!-- Header -->
     <!-- <div class="flex items-center justify-between px-4 pt-3 pb-2">
@@ -195,5 +192,6 @@
         </div>
       {/if}
     </div>
-  </PopoverContent>
-</Popover>
+  </Popover.Content>
+  </Popover.Portal>
+</Popover.Root>

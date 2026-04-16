@@ -8,7 +8,6 @@
     saveAdminKey,
   } from '$lib/admin'
   import CusButton from '$lib/components/ui/CusButton.svelte'
-  import { Input } from '$lib/components/ui/input'
   import { sources } from '$lib/stores/sources'
   import type { Source } from '$lib/types'
   import { toast } from 'svelte-sonner'
@@ -478,11 +477,11 @@
               onsubmit={saveAdminKeyFromForm}
               class="flex items-center gap-2"
             >
-              <Input
+              <input
                 type="password"
                 name="admin_key"
                 placeholder="Admin key..."
-                class="h-8 w-40 text-xs rounded-full border-border bg-transparent px-3"
+                class="h-8 w-40 text-xs rounded-full border border-border bg-transparent px-3 outline-none focus-visible:ring-2 focus-visible:ring-text-main/10 placeholder:text-text-secondary/60 disabled:cursor-not-allowed disabled:opacity-50"
                 autofocus
               />
               <CusButton class="h-8 px-3 text-xs" type="submit">Lưu</CusButton>
