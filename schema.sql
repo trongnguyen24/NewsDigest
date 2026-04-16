@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS sources (
   name        TEXT NOT NULL,
   type        TEXT NOT NULL,            -- 'rss' | 'html' | 'reddit' | 'youtube' | 'voz'
   enabled     INTEGER NOT NULL DEFAULT 1,
-  group_name  TEXT,                     -- nhóm chủ đề do user đặt, vd: "Tech", "AI"
+  channel_id  TEXT,                     -- YouTube channel_id (e.g. 'UCZRoNJu1OszFqABP8AuJIuw'), NULL cho non-YouTube sources
   last_fetched_at TEXT,                 -- ISO 8601
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );

@@ -586,7 +586,7 @@ app.get('/api/sources', async (c) => {
         s.name,
         s.type,
         s.enabled,
-        s.group_name,
+        s.channel_id,
         s.last_fetched_at,
         s.created_at,
         COUNT(a.id) AS article_count,
@@ -594,7 +594,7 @@ app.get('/api/sources', async (c) => {
       FROM sources s
       LEFT JOIN articles a ON a.source_id = s.id
       GROUP BY s.id
-      ORDER BY COALESCE(s.group_name, 'General') ASC, s.name ASC
+      ORDER BY s.name ASC
     `).all();
     return c.json({ sources: results });
 });
@@ -618,7 +618,7 @@ app.post('/api/sources', async (c) => {
     const authErr = requireAdmin(c);
     if (authErr) return authErr;
 
-    const { url, name, group_name } = await c.req.json();
+    const { url, name, channel_id } = await c.req.json();
     if (!url || typeof url !== 'string') return c.json({ error: 'url is required' }, 400);
 
     let resolved;
@@ -630,13 +630,13 @@ app.post('/api/sources', async (c) => {
 
     const id = crypto.randomUUID();
     await c.env.DB.prepare(
-        'INSERT INTO sources (id, url, name, type, group_name, enabled) VALUES (?, ?, ?, ?, ?, 1)'
+        'INSERT INTO sources (id, url, name, type, channel_id, enabled) VALUES (?, ?, ?, ?, ?, 1)'
     ).bind(
       id,
       resolved.resolved_url,
       name || 'Custom Source',
       resolved.detected_type,
-      group_name || 'General',
+      channel_id || null,
     ).run();
 
     return c.json({
@@ -646,7 +646,7 @@ app.post('/api/sources', async (c) => {
         url: resolved.resolved_url,
         name: name || 'Custom Source',
         type: resolved.detected_type,
-        group_name: group_name || 'General',
+        channel_id: channel_id || null,
         enabled: 1
       },
       resolved_url: resolved.resolved_url,
@@ -666,7 +666,7 @@ app.patch('/api/sources/:id', async (c) => {
 
     if (body.enabled !== undefined) { sets.push('enabled = ?'); binds.push(body.enabled ? 1 : 0); }
     if (body.name !== undefined) { sets.push('name = ?'); binds.push(body.name); }
-    if (body.group_name !== undefined) { sets.push('group_name = ?'); binds.push(body.group_name); }
+    if (body.channel_id !== undefined) { sets.push('channel_id = ?'); binds.push(body.channel_id); }
     if (body.url !== undefined) {
       if (typeof body.url !== 'string' || !body.url.trim()) return c.json({ error: 'Invalid url' }, 400);
       try {

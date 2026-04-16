@@ -118,7 +118,6 @@ ensureRequired(env, [
   'QUEUE_DLQ_NAME',
   'AI_GATEWAY_URL',
   'AI_GATEWAY_TOKEN',
-  'YOUTUBE_API_KEY',
   'RAPIDAPI_KEY',
 ]);
 
@@ -210,10 +209,10 @@ if (projectCreate.status === 0) {
 console.log('[cf:init] Setting worker secrets from .env...');
 upsertSecret('AI_GATEWAY_URL', env.AI_GATEWAY_URL);
 upsertSecret('AI_GATEWAY_TOKEN', env.AI_GATEWAY_TOKEN);
-upsertSecret('YOUTUBE_API_KEY', env.YOUTUBE_API_KEY);
 upsertSecret('RAPIDAPI_KEY', env.RAPIDAPI_KEY);
 
 if (env.ADMIN_API_KEY) upsertSecret('ADMIN_API_KEY', env.ADMIN_API_KEY);
+if (env.YOUTUBE_API_KEY) upsertSecret('YOUTUBE_API_KEY', env.YOUTUBE_API_KEY);
 
 if (env.WORKER_PUBLIC_URL) {
   upsertPagesSecret(env.PAGES_PROJECT_NAME, 'API_URL', env.WORKER_PUBLIC_URL);

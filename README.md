@@ -46,18 +46,6 @@ AI Gateway routes your Gemini API calls through Cloudflare, providing caching, r
    - **Auth token** → from gateway settings
 
 
-#### YouTube Data API v3
-
-Used to fetch latest videos from YouTube channels you subscribe to as sources.
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a project (or select an existing one)
-3. Go to **APIs & Services** → **Library** → search **YouTube Data API v3** → **Enable**
-4. Go to **APIs & Services** → **Credentials** → **Create Credentials** → **API Key**
-5. Copy the API key
-
-> **Tip:** Restrict the key to only YouTube Data API v3 for security.
-
 #### RapidAPI (YouTube Transcripts)
 
 Used to fetch video transcripts so the AI can summarize YouTube content.
@@ -105,8 +93,8 @@ This deploys the Worker, builds the frontend with the correct API URL, and deplo
 |---|---|---|
 | `AI_GATEWAY_URL` | [Cloudflare AI Gateway](https://dash.cloudflare.com) → AI → AI Gateway | Gateway URL for Gemini AI calls |
 | `AI_GATEWAY_TOKEN` | Same as above → gateway settings | Authorization token |
-| `YOUTUBE_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) | Fetches latest videos from YouTube channels |
 | `RAPIDAPI_KEY` | [RapidAPI — yt-api](https://rapidapi.com/ytjar/api/yt-api) | Fetches YouTube subtitles/transcripts |
+| `YOUTUBE_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) | Optional fallback when YouTube RSS feeds are down |
 | `ADMIN_API_KEY` | Self-generated (`openssl rand -hex 32`) | Protects write endpoints (optional) |
 
 ## Local Development

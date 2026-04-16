@@ -2,8 +2,8 @@ export interface Env {
   DB: D1Database;
   SCRAPER_CONFIG: KVNamespace;
   CONTENT_QUEUE: Queue;
-  YOUTUBE_API_KEY: string;
   RAPIDAPI_KEY: string;
+  YOUTUBE_API_KEY?: string;
   AI_GATEWAY_TOKEN: string;
   AI_GATEWAY_URL: string;
   ADMIN_API_KEY?: string;
@@ -55,7 +55,7 @@ export interface Source {
   name: string;
   type: 'rss' | 'html' | 'reddit' | 'youtube' | 'voz' | 'github-trending';
   enabled: number;
-  group_name: string | null;
+  channel_id: string | null;
   last_fetched_at: string | null;
   created_at: string;
 }

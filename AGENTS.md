@@ -1,7 +1,7 @@
 # AGENTS.md — NewsDigest
 
 > AI agent context for the NewsDigest codebase.
-> For full specs, see `docs/PROJECT_SPEC.md`. For DB schema, see `schema.sql`. For API endpoints, see `worker/api/index.ts`.
+> For DB schema, see `schema.sql`. For API endpoints, see `worker/api/index.ts`.
 
 ---
 

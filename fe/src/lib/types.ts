@@ -19,7 +19,7 @@ export interface Source {
   name: string;
   type: 'rss' | 'html' | 'reddit' | 'youtube' | 'voz' | 'github-trending';
   enabled: number;
-  group_name: string | null;
+  channel_id: string | null;
   last_fetched_at: string | null;
   created_at: string;
   article_count?: number;
