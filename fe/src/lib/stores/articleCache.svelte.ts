@@ -372,17 +372,17 @@ async function backgroundRefresh(date: string, cacheData: CachedDayData) {
 }
 
 /**
- * Force refresh: clear cache and reload.
+ * Force refresh: attempt to reload from network without losing cached data.
  * If data is currently displayed, uses backgroundRefresh to avoid skeleton flash.
+ * Caches are preserved until new data is successfully fetched — this prevents
+ * data loss when offline (the old code wiped caches before fetching, so an
+ * offline failure left both memory and IDB empty).
  */
 async function forceRefresh(date: string) {
-  memoryCache.delete(date);
-  digestCache.delete(date);
-
-  // Clear from IndexedDB in background
-  cacheDb.saveArticles(date, { articles: [], total: 0, fullyLoaded: false, timestamp: 0 });
-
   if (_articles.length > 0 && _currentDate === date) {
+    // Keep current articles in memory cache with timestamp=0 (forces re-fetch)
+    // so offline navigation still has data to fall back on.
+    // DO NOT wipe IDB — it serves as fallback for cold restarts.
     const tempCache: CachedDayData = {
       date,
       articles: [..._articles],
@@ -390,8 +390,12 @@ async function forceRefresh(date: string) {
       fullyLoaded: false,
       timestamp: 0,
     };
+    memoryCache.set(date, tempCache);
+    // backgroundRefresh will update memory + IDB on success, or no-op on failure
     await backgroundRefresh(date, tempCache);
   } else {
+    memoryCache.delete(date);
+    digestCache.delete(date);
     await loadDate(date);
   }
 }
