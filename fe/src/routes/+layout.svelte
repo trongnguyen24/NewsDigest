@@ -92,7 +92,7 @@
   <!-- Offline indicator -->
   {#if mounted && !isOnline}<div
       id="offline-banner"
-      class="fixed top-1 left-1/2 md:top-auto md:bottom-0 md:inset-x-0 md:translate-x-0 z-9999 flex -translate-x-1/2 items-center justify-center rounded-full overflow-hidden h-7 w-20 md:rounded-none md:w-full text-xs font-medium"
+      class="fixed top-6 left-1/2 md:top-auto md:bottom-0 md:inset-x-0 md:translate-x-0 z-10 flex -translate-x-1/2 items-center justify-center rounded-full overflow-hidden h-7 w-20 md:rounded-none md:w-full text-xs font-medium"
     >
       <span
         class="text-amber-600 bg-gray-200/80 flex items-center justify-center w-full h-full backdrop-blur-md"

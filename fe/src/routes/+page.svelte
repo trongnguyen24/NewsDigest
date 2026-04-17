@@ -418,7 +418,7 @@
   <div class="mobile-layout relative bg-bg-1">
     <!-- Mobile Top Header / Navigator -->
     <nav
-      class="flex justify-between px-4 py-8"
+      class="flex justify-between px-4 py-4"
       style="opacity: {ptrActive ? 0 : 1}; pointer-events: {ptrActive
         ? 'none'
         : 'auto'}; transition: opacity 0.2s ease;"
