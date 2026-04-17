@@ -34,7 +34,9 @@
   // ── Derived from cache store ─────────────────────────────────
   let articles = $derived(articleCache.articles)
   let digest = $derived(articleCache.digest)
-  let loading = $derived(articleCache.loading)
+  // loading: full network fetch with no cache (shows skeleton)
+  // initializing: IDB check in progress (shows nothing — avoids flash)
+  let loading = $derived(articleCache.loading || articleCache.initializing)
   let unsummarizedCount = $derived(articleCache.unsummarizedCount)
 
   let resummarizing = $state(false)
@@ -621,7 +623,7 @@
     >
       <div class="mobile-content" style="font-size: var(--font-size-base);">
         {#if loading}
-          <div class="flex flex-col gap-8 animate-pulse">
+          <div class="skeleton-container flex flex-col gap-8 animate-pulse">
             {#each Array(6) as _}
               <div>
                 <div class="flex items-center gap-2 mb-2">
@@ -927,7 +929,7 @@
         {/if}
         {#if loading}
           <!-- Loading skeleton -->
-          <div class="flex flex-col gap-8 animate-pulse">
+          <div class="skeleton-container flex flex-col gap-8 animate-pulse">
             {#each Array(6) as _}
               <div>
                 <div class="flex items-center gap-2 mb-2">

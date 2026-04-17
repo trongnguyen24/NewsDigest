@@ -236,6 +236,22 @@ aside[data-overlayscrollbars] {
   padding: 1.25rem 1rem 2rem;
 }
 
+/**
+ * Skeleton flash prevention.
+ * When cache exists, the skeleton mounts and unmounts quickly (< 200ms).
+ * By keeping it opacity:0 for 200ms using a delayed animation,
+ * it never visually appears when IDB cache is found.
+ * Genuine no-cache loads (first visit) show skeleton after the delay.
+ */
+@keyframes skeleton-reveal {
+  to { opacity: 1; }
+}
+
+.skeleton-container {
+  opacity: 0;
+  animation: skeleton-reveal 0s 200ms forwards;
+}
+
 /* ═══════════════ MOBILE SHEET (custom) ═══════════════ */
 #news-mobile-sheet-panel,
 #news-mobile-sheet-backdrop {
