@@ -12,7 +12,6 @@
     Link2,
     Loader2,
     Moon,
-    RefreshCw,
     Sparkles,
     Sun,
     X,
@@ -180,21 +179,6 @@
   })
 
   let isToday = $derived(data.currentDate === todayStr)
-
-  // Brief cooldown when transitioning to today to prevent accidental refresh clicks
-  let refreshCooldown = $state(false)
-  let prevIsToday = $state(false)
-  $effect(() => {
-    const currentIsToday = isToday
-    const wasToday = untrack(() => prevIsToday)
-    if (currentIsToday && !wasToday) {
-      refreshCooldown = true
-      setTimeout(() => (refreshCooldown = false), 400)
-    }
-    untrack(() => {
-      prevIsToday = currentIsToday
-    })
-  })
 
   let formattedDate = $derived.by(() => {
     const d = new Date(`${data.currentDate}T00:00:00`)
@@ -441,17 +425,16 @@
         <CusButton onclick={() => goToDate(-1)} class="size-10">
           <ChevronLeft class="-translate-x-px" size={20} />
         </CusButton>
-        <CusButton class="h-10 w-24 text-sm">{formattedDate}</CusButton>
+        <!-- <CusButton class="h-10 w-24 text-sm">{formattedDate}</CusButton> -->
         <CusButton
-          onclick={() =>
-            isToday ? articleCache.forceRefresh(data.currentDate) : goToDate(1)}
+          onclick={() => !isToday && goToDate(1)}
           class="size-10"
-          disabled={isToday && (articleCache.refreshing || refreshCooldown)}
+          disabled={isToday}
         >
           <div class="grid place-items-center">
             {#if isToday}
               <div
-                class="col-start-1 row-start-1"
+                class="col-start-1 row-start-1 opacity-50"
                 in:slideScaleFade={{
                   duration: 250,
                   startScale: 0.5,
@@ -463,12 +446,7 @@
                   startOpacity: 0,
                 }}
               >
-                <RefreshCw
-                  size={16}
-                  class={articleCache.refreshing || articleCache.loadingMore
-                    ? 'animate-spin'
-                    : ''}
-                />
+                <ChevronRight class="translate-x-px" size={20} />
               </div>
             {:else}
               <div
@@ -614,6 +592,9 @@
       <SourceFilter {articles} size="md" />
     </div>
 
+    <h2 class="text-2xl mb-8 font-serif text-text-main text-center font-bold">
+      {formattedDate}
+    </h2>
     <!-- Active filter bar (mobile) -->
     {#if hasActiveFilter}
       <div class="flex text-lg items-center gap-2 px-4 py-2">
@@ -668,7 +649,7 @@
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              class="prose prose-sm max-w-none text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main! prose-headings:text-base prose-headings:mt-6 prose-headings:mb-2 prose-p:leading-relaxed"
+              class="prose prose-sm max-w-none text-text-main-2 prose-headings:text-text-main! prose-p:text-text-main-2! prose-li:text-text-main-2! prose-a:text-text-main-2! prose-strong:text-text-main! prose-headings:text-base prose-headings:mt-6 prose-headings:mb-2 prose-p:leading-relaxed pb-16"
               onclick={handleDigestClick}
             >
               {@html parsedDigestHtml}
@@ -681,7 +662,7 @@
             </div>
           {/if}
         {:else}
-          <div class="flex flex-col gap-6 pb-16">
+          <div class="flex flex-col gap-8 pb-16">
             {#each filteredArticles as article (article.id)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -690,7 +671,7 @@
                 onclick={() => selectArticle(article)}
               >
                 <div
-                  class="flex items-center text-[0.675em] text-text-secondary uppercase tracking-wider mb-2"
+                  class="flex items-center text-[0.675em] text-text-secondary uppercase tracking-wider mb-1"
                 >
                   <span class="truncate pr-4"
                     >{getSourceName(article.source_id)}</span
@@ -759,19 +740,16 @@
           <CusButton onclick={() => goToDate(-1)} class="size-8">
             <ChevronLeft class="-translate-x-px" size={20} />
           </CusButton>
-          <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton>
+          <!-- <CusButton class="h-8 w-24 text-sm">{formattedDate}</CusButton> -->
           <CusButton
-            onclick={() =>
-              isToday
-                ? articleCache.forceRefresh(data.currentDate)
-                : goToDate(1)}
+            onclick={() => !isToday && goToDate(1)}
             class="size-8"
-            disabled={isToday && (articleCache.refreshing || refreshCooldown)}
+            disabled={isToday}
           >
             <div class="grid place-items-center">
               {#if isToday}
                 <div
-                  class="col-start-1 row-start-1"
+                  class="col-start-1 row-start-1 opacity-50"
                   in:slideScaleFade={{
                     duration: 250,
                     startScale: 0.5,
@@ -783,12 +761,7 @@
                     startOpacity: 0,
                   }}
                 >
-                  <RefreshCw
-                    size={14}
-                    class={articleCache.refreshing || articleCache.loadingMore
-                      ? 'animate-spin'
-                      : ''}
-                  />
+                  <ChevronRight class="translate-x-px" size={20} />
                 </div>
               {:else}
                 <div
@@ -929,9 +902,15 @@
       <OverlayScrollbarsComponent
         defer
         options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 300 } }}
-        class="px-6 py-24"
+        class="px-6 py-20"
         style="font-size: var(--font-size-base);"
       >
+        <!-- Title -->
+        <h2
+          class="text-2xl mb-8 font-serif text-text-main text-center font-bold"
+        >
+          {formattedDate}
+        </h2>
         <!-- Active filter bar (desktop) -->
         {#if hasActiveFilter}
           <div class="flex items-center gap-2 mb-8">

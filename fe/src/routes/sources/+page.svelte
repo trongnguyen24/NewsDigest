@@ -409,6 +409,7 @@
               onsubmit={saveAdminKeyFromForm}
               class="flex items-center gap-2"
             >
+              <!-- svelte-ignore a11y_autofocus -->
               <input
                 type="password"
                 name="admin_key"
