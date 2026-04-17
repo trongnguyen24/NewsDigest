@@ -2,7 +2,7 @@
   import { tick, onMount, untrack } from 'svelte'
   import { browser } from '$app/environment'
   import { goto } from '$app/navigation'
-  import { filters } from '$lib/stores/articles'
+  import { filters } from '$lib/stores/articles.svelte'
   import { prefs, cycleFontSize } from '$lib/stores/prefs'
   import {
     CaseSensitive,
@@ -205,23 +205,23 @@
 
   let filteredArticles = $derived.by(() => {
     let result: Article[] = articles
-    if ($filters.sourceId) {
-      result = result.filter((a) => a.source_id === $filters.sourceId)
+    if (filters.sourceId) {
+      result = result.filter((a) => a.source_id === filters.sourceId)
     }
-    if ($filters.tag) {
+    if (filters.tag) {
       result = result.filter((a) => {
         try {
           const tags: string[] = a.tags ? JSON.parse(a.tags) : []
           return tags.some(
-            (t) => t.toLowerCase() === $filters.tag.toLowerCase(),
+            (t) => t.toLowerCase() === filters.tag.toLowerCase(),
           )
         } catch {
           return false
         }
       })
     }
-    if ($filters.minHot > 0) {
-      result = result.filter((a) => (a.hot_score ?? 0) >= $filters.minHot)
+    if (filters.minHot > 0) {
+      result = result.filter((a) => (a.hot_score ?? 0) >= filters.minHot)
     }
     return result
   })
@@ -229,7 +229,7 @@
   // Auto-select first article when filter changes (desktop)
   let prevFilterKey = $state('')
   $effect(() => {
-    const filterKey = `${$filters.sourceId}|${$filters.tag}|${$filters.minHot}`
+    const filterKey = `${filters.sourceId}|${filters.tag}|${filters.minHot}`
     const prev = untrack(() => prevFilterKey)
     if (filterKey !== prev && prev !== '') {
       untrack(() => {
@@ -245,20 +245,20 @@
     })
   })
 
-  let hasActiveFilter = $derived(!!$filters.sourceId || !!$filters.tag)
+  let hasActiveFilter = $derived(!!filters.sourceId || !!filters.tag)
   let activeFilterLabel = $derived.by(() => {
     const parts: string[] = []
-    if ($filters.sourceId) {
-      const name = $sources.find((s) => s.id === $filters.sourceId)?.name
+    if (filters.sourceId) {
+      const name = $sources.find((s) => s.id === filters.sourceId)?.name
       if (name) parts.push(name)
     }
-    if ($filters.tag) parts.push(`#${$filters.tag}`)
+    if (filters.tag) parts.push(`#${filters.tag}`)
     return parts.join(' · ')
   })
 
   function clearFilters() {
-    $filters.sourceId = ''
-    $filters.tag = ''
+    filters.sourceId = ''
+    filters.tag = ''
   }
 
   let sideView: 'list' | 'digest' = $state('list')

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Popover } from 'bits-ui'
-  import { filters } from '$lib/stores/articles'
+  import { filters } from '$lib/stores/articles.svelte'
   import { sources } from '$lib/stores/sources'
   import { Filter, Check, X } from 'lucide-svelte'
   import type { Article } from '$lib/types'
@@ -56,29 +56,29 @@
   })
 
   // Check if any filter is active
-  let hasActiveFilter = $derived(!!$filters.sourceId || !!$filters.tag)
+  let hasActiveFilter = $derived(!!filters.sourceId || !!filters.tag)
 
   function selectSource(sourceId: string) {
-    if ($filters.sourceId === sourceId) {
-      $filters.sourceId = ''
+    if (filters.sourceId === sourceId) {
+      filters.sourceId = ''
     } else {
-      $filters.sourceId = sourceId
+      filters.sourceId = sourceId
     }
     open = false
   }
 
   function selectTag(tag: string) {
-    if ($filters.tag.toLowerCase() === tag.toLowerCase()) {
-      $filters.tag = ''
+    if (filters.tag.toLowerCase() === tag.toLowerCase()) {
+      filters.tag = ''
     } else {
-      $filters.tag = tag
+      filters.tag = tag
     }
     open = false
   }
 
   function clearAll() {
-    $filters.sourceId = ''
-    $filters.tag = ''
+    filters.sourceId = ''
+    filters.tag = ''
     open = false
   }
 </script>
@@ -130,7 +130,7 @@
         <div>
           <div class="flex flex-col gap-1">
             {#each availableSources as source (source.id)}
-              {@const isSelected = $filters.sourceId === source.id}
+              {@const isSelected = filters.sourceId === source.id}
               {@const articleCount = articles.filter(
                 (a) => a.source_id === source.id,
               ).length}
@@ -169,7 +169,7 @@
           <div class="flex flex-wrap gap-1.5">
             {#each availableTags as { tag, count } (tag)}
               {@const isSelected =
-                $filters.tag.toLowerCase() === tag.toLowerCase()}
+                filters.tag.toLowerCase() === tag.toLowerCase()}
               <button
                 class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[0.625rem] font-medium transition-colors cursor-pointer
                   {isSelected
