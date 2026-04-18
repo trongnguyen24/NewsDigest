@@ -37,7 +37,7 @@
 >
   <!-- Frosted background -->
   <span
-    class="absolute inset-y-0 -inset-x-0.5 bg-black/5 backdrop-blur-md rounded-full"
+    class="absolute inset-y-0 -inset-x-0.5 bg-black/5 dark:bg-black/30 backdrop-blur-md rounded-full"
   ></span>
 
   <!-- Sliding indicator -->
