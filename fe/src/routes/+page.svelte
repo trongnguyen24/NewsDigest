@@ -23,6 +23,7 @@
   import { OverlayScrollbarsComponent } from 'overlayscrollbars-svelte'
   import { slideScaleFade } from '$lib/transitions/slideScaleFade'
   import CusButton from '$lib/components/ui/CusButton.svelte'
+  import CusButtonTab from '$lib/components/ui/CusButtonTab.svelte'
   import { articleCache } from '$lib/stores/articleCache.svelte'
   import SourceFilter from '$lib/components/app/SourceFilter.svelte'
   import MobileArticleSheet from '$lib/components/app/MobileArticleSheet.svelte'
@@ -212,9 +213,7 @@
       result = result.filter((a) => {
         try {
           const tags: string[] = a.tags ? JSON.parse(a.tags) : []
-          return tags.some(
-            (t) => t.toLowerCase() === filters.tag.toLowerCase(),
-          )
+          return tags.some((t) => t.toLowerCase() === filters.tag.toLowerCase())
         } catch {
           return false
         }
@@ -270,8 +269,9 @@
   // ── OverlayScrollbars refs (desktop) ──────────────────────────
   // asideScrollbar = left panel (article list / digest)
   // mainScrollbar  = right panel (article content)
-  let asideScrollbar: ReturnType<typeof OverlayScrollbarsComponent> | undefined =
-    $state()
+  let asideScrollbar:
+    | ReturnType<typeof OverlayScrollbarsComponent>
+    | undefined = $state()
   let mainScrollbar: ReturnType<typeof OverlayScrollbarsComponent> | undefined =
     $state()
 
@@ -279,7 +279,10 @@
   function scrollToTop(
     ref: ReturnType<typeof OverlayScrollbarsComponent> | undefined,
   ) {
-    ref?.osInstance()?.elements().viewport.scrollTo({ top: 0, behavior: 'instant' })
+    ref
+      ?.osInstance()
+      ?.elements()
+      .viewport.scrollTo({ top: 0, behavior: 'instant' })
   }
 
   // automatically select the first article when articles load on desktop
@@ -438,7 +441,10 @@
           class="size-10"
           disabled={isToday}
         >
-          <div class="transition-opacity duration-200" class:opacity-50={isToday}>
+          <div
+            class="transition-opacity duration-200"
+            class:opacity-50={isToday}
+          >
             <ChevronRight class="translate-x-px" size={20} />
           </div>
         </CusButton>
@@ -461,16 +467,32 @@
             {#if $prefs.darkMode}
               <div
                 class="col-start-1 row-start-1"
-                in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-                out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                in:slideScaleFade={{
+                  duration: 250,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
+                out:slideScaleFade={{
+                  duration: 200,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
               >
                 <Sun size={16} />
               </div>
             {:else}
               <div
                 class="col-start-1 row-start-1"
-                in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-                out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                in:slideScaleFade={{
+                  duration: 250,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
+                out:slideScaleFade={{
+                  duration: 200,
+                  startScale: 0.5,
+                  startOpacity: 0,
+                }}
               >
                 <Moon size={16} />
               </div>
@@ -735,12 +757,24 @@
             class="size-8"
             disabled={isToday}
           >
-            <div class="transition-opacity duration-200" class:opacity-50={isToday}>
+            <div
+              class="transition-opacity duration-200"
+              class:opacity-50={isToday}
+            >
               <ChevronRight class="translate-x-px" size={20} />
             </div>
           </CusButton>
         </div>
-        <div class="flex gap-1">
+        <div class="flex gap-2">
+          <CusButtonTab
+            value={sideView !== 'digest'}
+            onchange={(v) => {
+              sideView = v ? 'list' : 'digest'
+              tick().then(() => scrollToTop(asideScrollbar))
+            }}
+            tab1Label="News"
+            tab2Label="Digest"
+          />
           <SourceFilter {articles} size="sm" />
           {#if isAdmin && unsummarizedCount > 0 && !aiButtonHidden}
             <!-- svelte-ignore a11y_consider_explicit_label -->
@@ -777,13 +811,14 @@
               <span>{lastEnqueued} bài · {aiEstimateLabel}</span>
             </div>
           {/if}
+
           <!-- svelte-ignore a11y_consider_explicit_label -->
           <CusButton
             onclick={() => {
               sideView = sideView === 'digest' ? 'list' : 'digest'
               tick().then(() => scrollToTop(asideScrollbar))
             }}
-            class="size-8"
+            class="size-8 hidden!"
           >
             <div class="grid place-items-center">
               {#if sideView === 'digest'}
@@ -1018,16 +1053,32 @@
                 {#if $prefs.darkMode}
                   <div
                     class="col-start-1 row-start-1"
-                    in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-                    out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                    in:slideScaleFade={{
+                      duration: 250,
+                      startScale: 0.5,
+                      startOpacity: 0,
+                    }}
+                    out:slideScaleFade={{
+                      duration: 200,
+                      startScale: 0.5,
+                      startOpacity: 0,
+                    }}
                   >
                     <Sun size={16} />
                   </div>
                 {:else}
                   <div
                     class="col-start-1 row-start-1"
-                    in:slideScaleFade={{ duration: 250, startScale: 0.5, startOpacity: 0 }}
-                    out:slideScaleFade={{ duration: 200, startScale: 0.5, startOpacity: 0 }}
+                    in:slideScaleFade={{
+                      duration: 250,
+                      startScale: 0.5,
+                      startOpacity: 0,
+                    }}
+                    out:slideScaleFade={{
+                      duration: 200,
+                      startScale: 0.5,
+                      startOpacity: 0,
+                    }}
                   >
                     <Moon size={16} />
                   </div>
