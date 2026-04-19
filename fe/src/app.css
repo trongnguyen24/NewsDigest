@@ -194,14 +194,15 @@ aside[data-overlayscrollbars] {
   display: inline;
   background: none;
   border: none;
-  padding: 0;
-  font: inherit;
+  padding: 0.125rem 0.5rem;
+  font-family: var(--font-mono);
+  line-height: 1;
+  font-size: 0.8em;
   color: var(--color-text-main);
   font-weight: 600;
-  text-decoration: underline;
-  text-decoration-color: var(--color-border);
-  text-underline-offset: 3px;
-  text-decoration-thickness: 2px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-btn);
+  border-radius: 9999px;
   cursor: pointer;
   transition: text-decoration-color 0.2s ease;
 }

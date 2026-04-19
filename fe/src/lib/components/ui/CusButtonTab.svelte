@@ -21,6 +21,7 @@
   let indicatorW = $derived(value ? tab1W : tab2W)
   let indicatorX = $derived(value ? 0 : tab1W)
   let visible = $state(false)
+  let indicatorEl = $state<HTMLSpanElement | null>(null)
 
   $effect(() => {
     if (tab1W > 0) {
@@ -29,7 +30,15 @@
     }
   })
 
+  function playPress(el: HTMLSpanElement | null) {
+    el?.animate([{ scale: '1' }, { scale: '0.85' }, { scale: '1' }], {
+      duration: 400,
+      easing: 'cubic-bezier(.22,1,.36,1)',
+    })
+  }
+
   function toggle() {
+    playPress(indicatorEl)
     value = !value
     onchange?.(value)
   }
@@ -37,7 +46,7 @@
 
 <button
   onclick={toggle}
-  class="group relative h-8 inline-flex items-center rounded-full text-xs cursor-pointer"
+  class="relative h-8 inline-flex items-center rounded-full text-xs cursor-pointer"
 >
   <!-- Frosted background -->
   <span
@@ -46,7 +55,8 @@
 
   <!-- Sliding indicator -->
   <span
-    class="absolute inset-y-0.5 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[width,transform,opacity] duration-300 ease-out group-active:scale-90 group-active:duration-100"
+    bind:this={indicatorEl}
+    class="absolute inset-y-0.5 rounded-full border border-white bg-bg-btn dark:border-white/5 dark:bg-bg-btn dark:shadow-sm shadow-[0_8px_16px_rgba(73,71,69,0.03),0_4px_8px_rgba(73,71,69,0.03)] transition-[width,transform,opacity] duration-400 ease-out"
     class:opacity-0={!visible}
     style="width: {indicatorW}px; transform: translateX({indicatorX}px);"
   ></span>

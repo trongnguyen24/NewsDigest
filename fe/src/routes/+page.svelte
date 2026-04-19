@@ -225,6 +225,40 @@
     return result
   })
 
+  // ── Digest-scoped article list (for next/prev navigation) ───
+  // Extract unique article IDs referenced in the digest text via <id:uuid> markers
+  let digestArticleIds = $derived.by(() => {
+    if (!digest?.summary_text) return []
+    const matches = [...digest.summary_text.matchAll(/<id:([a-f0-9-]+)>/gi)]
+    const seen = new Set<string>()
+    return matches.map(m => m[1]).filter(id => {
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+  })
+
+  // Articles present in the digest, ordered by their appearance in the digest text
+  let digestArticles = $derived.by(() => {
+    const map = new Map(articles.map(a => [a.id, a]))
+    return digestArticleIds.filter(id => map.has(id)).map(id => map.get(id)!)
+  })
+
+  let sideView = $state<'list' | 'digest'>('list')
+
+  // Navigation list: digest articles when viewing digest, filtered articles otherwise
+  let navArticles = $derived(
+    sideView === 'digest' ? digestArticles : filteredArticles
+  )
+
+  let selectedArticle: Article | null = $state(null)
+
+  // Current article index within navArticles (for disabled state of prev/next)
+  let navIdx = $derived.by(() => {
+    const sel = selectedArticle
+    return sel ? navArticles.findIndex((a) => a.id === sel.id) : -1
+  })
+
   // Auto-select first article when filter changes (desktop)
   let prevFilterKey = $state('')
   $effect(() => {
@@ -260,8 +294,31 @@
     filters.tag = ''
   }
 
-  let sideView: 'list' | 'digest' = $state('list')
-  let selectedArticle: Article | null = $state(null)
+  // ── Filter ↔ Digest auto-switch ─────────────────────────────
+  // Remember which view user was on before a filter was activated
+  let viewBeforeFilter: 'list' | 'digest' | null = $state(null)
+  let prevHadFilter = $state(false)
+  $effect(() => {
+    const active = hasActiveFilter
+    const prev = untrack(() => prevHadFilter)
+    if (active && !prev) {
+      // Filter just activated → switch to list, remember old view
+      untrack(() => {
+        viewBeforeFilter = sideView
+        sideView = 'list'
+      })
+    } else if (!active && prev) {
+      // Filter just cleared → restore previous view
+      untrack(() => {
+        if (viewBeforeFilter) {
+          sideView = viewBeforeFilter
+          viewBeforeFilter = null
+        }
+      })
+    }
+    untrack(() => { prevHadFilter = active })
+  })
+
 
   // State to track scroll preservation
   let lastScrollInfo = $state({ articleId: null as string | null })
@@ -318,14 +375,12 @@
         if (date !== currentDatasetId) {
           currentDatasetId = date
           if (innerWidth >= 768) {
-            sideView = 'list'
             if (filteredArticles.length > 0) {
               selectedArticle = filteredArticles[0]
             } else {
               selectedArticle = null
             }
           } else {
-            sideView = 'list'
             selectedArticle = null
           }
           // Reset scroll for both panels when date changes (desktop only)
@@ -346,18 +401,18 @@
   }
 
   function goToPrevArticle() {
-    if (!selectedArticle || filteredArticles.length === 0) return
-    const idx = filteredArticles.findIndex((a) => a.id === selectedArticle!.id)
+    if (!selectedArticle || navArticles.length === 0) return
+    const idx = navArticles.findIndex((a) => a.id === selectedArticle!.id)
     if (idx > 0) {
-      selectedArticle = filteredArticles[idx - 1]
+      selectedArticle = navArticles[idx - 1]
     }
   }
 
   function goToNextArticle() {
-    if (!selectedArticle || filteredArticles.length === 0) return
-    const idx = filteredArticles.findIndex((a) => a.id === selectedArticle!.id)
-    if (idx < filteredArticles.length - 1) {
-      selectedArticle = filteredArticles[idx + 1]
+    if (!selectedArticle || navArticles.length === 0) return
+    const idx = navArticles.findIndex((a) => a.id === selectedArticle!.id)
+    if (idx < navArticles.length - 1) {
+      selectedArticle = navArticles[idx + 1]
     }
   }
 
@@ -388,7 +443,7 @@
     const processed = digest.summary_text.replace(
       /<id:([a-f0-9-]+)>/gi,
       (_match: string, id: string) => {
-        return `<button class="digest-article-ref" data-article-id="${id}">↗</button>`
+        return `<button class="digest-article-ref" data-article-id="${id}">source</button>`
       },
     )
     return marked.parse(processed) as string
@@ -730,7 +785,7 @@
   <MobileArticleSheet
     open={drawerOpen}
     {selectedArticle}
-    {filteredArticles}
+    filteredArticles={navArticles}
     onPrev={goToPrevArticle}
     onNext={goToNextArticle}
     onClose={() => {
@@ -1023,17 +1078,13 @@
         <div class="flex gap-1">
           <CusButton
             onclick={goToPrevArticle}
-            disabled={!selectedArticle ||
-              filteredArticles.findIndex((a) => a.id === selectedArticle?.id) <=
-                0}
+            disabled={navIdx <= 0}
             class="size-8"
             ><ChevronLeft class="-translate-x-px" size={20} /></CusButton
           >
           <CusButton
             onclick={goToNextArticle}
-            disabled={!selectedArticle ||
-              filteredArticles.findIndex((a) => a.id === selectedArticle?.id) >=
-                filteredArticles.length - 1}
+            disabled={navIdx < 0 || navIdx >= navArticles.length - 1}
             class="size-8"
             ><ChevronRight class="translate-x-px" size={20} /></CusButton
           >
