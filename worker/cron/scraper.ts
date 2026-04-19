@@ -452,7 +452,14 @@ async function fetchRSS(source: Source): Promise<ArticleInput[]> {
     entries = feed.entries ?? [];
   }
 
-  const mapped = entries.slice(0, 20).map((entry: any) => {
+  // Chỉ lấy bài trong 3 ngày gần nhất, tối đa 10 bài
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  const recent = entries.filter((entry: any) => {
+    if (!entry.published) return true; // không có ngày → giữ lại, normalizeDate sẽ dùng now
+    return new Date(entry.published) >= threeDaysAgo;
+  });
+
+  const mapped = recent.slice(0, 10).map((entry: any) => {
     let link = (entry.link ?? '').trim();
     if (link && !/^https?:\/\//i.test(link)) {
       try { link = new URL(link, source.url).toString(); } catch { link = ''; }
@@ -468,7 +475,10 @@ async function fetchRSS(source: Source): Promise<ArticleInput[]> {
   });
 
   const valid = mapped.filter(item => item.url && item.title);
-  console.log(`[scraper] RSS ${source.url}: parsed ${entries.length} entries, valid ${valid.length}`);
+  console.log(
+    `[scraper] RSS ${source.url}: total=${entries.length} recent=${recent.length} valid=${valid.length} ` +
+    `(cutoff=${threeDaysAgo.toISOString().slice(0, 10)})`
+  );
   return valid;
 }
 
