@@ -355,16 +355,16 @@
       </div>
 
       <div
-        class="fixed bottom-0 left-0 right-0 pb-8 pt-4 px-4 bg-linear-to-t from-10% from-bg-2 to-bg-2/0"
+        class="fixed bottom-0 left-0 right-0 pb-8 pt-4 px-8 bg-linear-to-t from-10% from-bg-2 to-bg-2/0"
       >
-        <div class="flex gap-3">
-          <CusButton onclick={onPrev} disabled={!canGoPrev} class="h-10 flex-1">
+        <div class="flex gap-2">
+          <CusButton onclick={onPrev} disabled={!canGoPrev} class="h-12 flex-1">
             <ChevronLeft class="-translate-x-px" size={20} />
           </CusButton>
-          <CusButton onclick={requestClose} class="h-10 flex-1 px-3 text-xs">
+          <CusButton onclick={requestClose} class="h-12 flex-1 px-3 text-xs">
             {currentIndex + 1} / {filteredArticles.length}
           </CusButton>
-          <CusButton onclick={onNext} disabled={!canGoNext} class="h-10 flex-1">
+          <CusButton onclick={onNext} disabled={!canGoNext} class="h-12 flex-1">
             <ChevronRight class="translate-x-px" size={20} />
           </CusButton>
         </div>
