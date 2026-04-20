@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Env } from '../../types';
 import { SourceRepo, ArticleRepo } from '../../db';
 import { requireAdmin, normalizeDate, resolveSource, ALLOWED_SOURCE_TYPES } from '../utils';
+import { stripHtmlToText } from '../../scraper/utils';
 
 const sources = new Hono<{ Bindings: Env }>();
 
@@ -129,15 +130,27 @@ sources.post('/:id/fetch', async (c) => {
         const articles = await fetchSource(source, c.env);
         let insertedCount = 0;
         for (const art of articles) {
+            const idValue = crypto.randomUUID();
             const changes = await ArticleRepo.insertOrIgnore(c.env.DB, {
-                id: crypto.randomUUID(),
+                id: idValue,
                 source_id: source.id,
                 url: art.url,
                 title: art.title,
                 description: art.description || '',
                 published_at: normalizeDate(art.published_at),
             });
-            if (changes > 0) insertedCount++;
+            if (changes > 0) {
+                insertedCount++;
+
+                // Pre-save content from RSS content:encoded (mirrors cron logic)
+                if (art.contentEncoded) {
+                    const plainText = stripHtmlToText(art.contentEncoded);
+                    if (plainText.length >= 500) {
+                        await ArticleRepo.updateContent(c.env.DB, idValue, plainText);
+                        console.log(`📦 RSS content:encoded saved for "${art.title}" (${plainText.length} chars)`);
+                    }
+                }
+            }
         }
         const lastFetchedAt = await SourceRepo.updateLastFetched(c.env.DB, source.id);
 

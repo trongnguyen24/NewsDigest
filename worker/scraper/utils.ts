@@ -186,3 +186,21 @@ export function decodeEntities(s: string): string {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec)));
 }
+
+/**
+ * Strip HTML tags from RSS content:encoded → plain text suitable for AI summarization.
+ * Preserves line breaks at block-level elements. Decodes HTML entities.
+ */
+export function stripHtmlToText(html: string): string {
+  return decodeEntities(
+    html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/?(p|div|h[1-6]|li|blockquote|tr|td|th|section|article)[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  );
+}
+

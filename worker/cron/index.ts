@@ -1,6 +1,7 @@
 import { Env, Source, ContentScrapeMessage } from '../types';
 import { ArticleRepo, SourceRepo } from '../db';
 import { fetchSource } from './scraper';
+import { stripHtmlToText } from '../scraper/utils';
 
 /** Chuẩn hoá published_at về ISO 8601 UTC trước khi insert. */
 function normalizePublishedAt(raw?: string | null): string {
@@ -132,6 +133,17 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
         if (changes > 0) {
           insertedCount++;
           newArticles.push({ articleId: idValue, url: article.url, title: article.title });
+
+          // ── Pre-save content from RSS content:encoded (e.g. WordPress) ──
+          // If the feed already provides full HTML content, strip and save it now.
+          // The queue consumer will skip scraping and go straight to AI summarize.
+          if (article.contentEncoded) {
+            const plainText = stripHtmlToText(article.contentEncoded);
+            if (plainText.length >= 500) {
+              await ArticleRepo.updateContent(env.DB, idValue, plainText);
+              console.log(`📦 RSS content:encoded saved for "${article.title}" (${plainText.length} chars)`);
+            }
+          }
         }
       }
     }

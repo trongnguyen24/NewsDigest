@@ -59,20 +59,32 @@ export async function fetchRSS(source: Source): Promise<ArticleInput[]> {
     if (link && !/^https?:\/\//i.test(link)) {
       try { link = new URL(link, source.url).toString(); } catch { link = ''; }
     }
-    // description: prefer feed-extractor's normalized field, fallback to content:encoded / media
-    const desc = entry.description || entry.contentEncoded || entry.mediaDescription || '';
-    return {
+    // description: plain text summary only (feed-extractor normalized field or media description)
+    // contentEncoded is kept separate — full HTML from content:encoded, NOT merged into description
+    const desc = entry.description || entry.mediaDescription || '';
+    const contentEncoded: string = entry.contentEncoded || '';
+    const item: ArticleInput = {
       url: link,
       title: (entry.title ?? '').trim(),
       description: desc,
       published_at: normalizeDate(entry.published ?? null),
     };
+    if (contentEncoded) item.contentEncoded = contentEncoded;
+    return item;
   });
 
   const valid = mapped.filter(item => item.url && item.title);
+
+  // Diagnostics: RSS feed quality summary
+  const withEncoded = valid.filter(a => a.contentEncoded && a.contentEncoded.length > 0).length;
+  const withRichDesc = valid.filter(a => (a.description?.length ?? 0) > 200).length;
+  const avgDescLen = valid.length > 0
+    ? Math.round(valid.reduce((s, a) => s + (a.description?.length ?? 0), 0) / valid.length)
+    : 0;
   console.log(
-    `[scraper] RSS ${source.url}: total=${entries.length} recent=${recent.length} valid=${valid.length} ` +
-    `(cutoff=${threeDaysAgo.toISOString().slice(0, 10)})`
+    `[rss] ${source.url}: total=${entries.length} recent=${recent.length} valid=${valid.length} ` +
+    `content:encoded=${withEncoded}/${valid.length} rich_desc=${withRichDesc}/${valid.length} avg_desc=${avgDescLen}chars` +
+    ` (cutoff=${threeDaysAgo.toISOString().slice(0, 10)})`
   );
   return valid;
 }

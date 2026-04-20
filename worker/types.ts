@@ -77,6 +77,8 @@ export interface ArticleInput {
   title: string;
   description?: string;
   published_at?: string;
+  /** Full HTML content from RSS content:encoded (e.g. WordPress blogs). Strip HTML before using. */
+  contentEncoded?: string;
   /** Reddit-only: raw upvote score */
   reddit_score?: number;
   /** Reddit-only: raw comment count */

@@ -45,7 +45,8 @@ export async function handleContentQueue(
           // Fallback: dùng RSS description nếu scraping không lấy được nội dung
           // (ví dụ: trang dùng client-side rendering như Cloudflare blog/Astro)
           content = status.description;
-          console.log(`⚠️ No content scraped for ${url} — falling back to RSS description (${content.length} chars)`);
+          const quality = content.length >= 1000 ? '✅ rich' : '⚠️ short';
+          console.log(`${quality} RSS description fallback for ${url} (${content.length} chars)`);
         }
       } else {
         console.log(`✨ Reusing existing content for "${title}" (${content.length} chars)`);
