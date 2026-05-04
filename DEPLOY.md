@@ -5,43 +5,81 @@
 > This file is the canonical step-by-step guide for deploying NewsDigest.
 > Walk the user through each section **interactively** — ask for values,
 > write them to `.env`, then run commands only after the user confirms.
-> Never skip a step or assume a value is already set.
+> **Always start with the Orientation section below. Never jump straight to running commands.**
 
 ---
 
-## Overview
+## ORIENTATION — Read this to the user first
 
-NewsDigest is deployed as two Cloudflare services:
+> 🤖 **AI assistant:** Before doing anything, present this overview to the user in plain language. Wait for them to say they understand and are ready before proceeding to STEP 0.
 
-| Service | Platform | Command |
+---
+
+Explain to the user:
+
+**What is NewsDigest?**
+NewsDigest is a self-hosted app with two parts:
+- A **Worker** (backend API + cron job) running on Cloudflare Workers — it scrapes sources, calls the AI, and stores data.
+- A **Frontend** (PWA) running on Cloudflare Pages — the reader interface.
+
+Both are deployed to Cloudflare's free tier. The whole process takes about 10–15 minutes the first time.
+
+---
+
+**What accounts and keys will you need?**
+
+| What | Where to get it | Required? |
 |---|---|---|
-| Worker (API + cron) | Cloudflare Workers | `npm run deploy:worker` |
-| Frontend (PWA) | Cloudflare Pages | `npm run deploy:fe` |
+| Cloudflare account | https://dash.cloudflare.com | ✅ Yes (free) |
+| Gemini API key | https://aistudio.google.com/apikey | ✅ Yes (free) — *unless using AI Gateway* |
+| RapidAPI key (yt-api) | https://rapidapi.com/ytjar/api/yt-api | ✅ Yes (free tier) |
+| YouTube Data API v3 key | https://console.cloud.google.com/apis/credentials | ⬜ Only if using YouTube sources |
+| Admin API key | Self-generated (`openssl rand -hex 32`) | ⬜ Optional, protects write endpoints |
 
-Both are deployed together with `npm run deploy`.
-
-The deploy process is:
-1. Create/fill `.env` with required credentials
-2. `npm run cf:init` — provisions all Cloudflare resources and uploads secrets
-3. `npm run deploy` — deploys Worker then Pages
+> For AI: **Gemini API key** and **RapidAPI key** are the two keys that block progress if missing. Mention these first.
 
 ---
 
-## STEP 0 — Check prerequisites
+**What will happen during this setup?**
 
-Ask the user to confirm the following before proceeding:
+1. You fill in a `.env` file with your credentials (the AI will ask for each one)
+2. `npm run cf:init` — the script auto-creates everything on Cloudflare:
+   - A D1 database (SQLite), a KV namespace, two Queues, a Pages project
+   - Uploads all your secrets directly to Cloudflare (they never leave your machine)
+   - Runs the DB schema migration
+3. `npm run deploy` — deploys the Worker and the Frontend
 
-- [ ] Node.js 18+ is installed (`node -v`)
-- [ ] They have a [Cloudflare account](https://dash.cloudflare.com) (free plan is fine)
-- [ ] They are logged in to Cloudflare CLI: `npx wrangler whoami`
-  - If not: `npx wrangler login`
+You do **not** need to manually create anything on the Cloudflare dashboard — `cf:init` handles it all.
+
+---
+
+**Nothing will be run until you say so.** Ask the user: *"Does this make sense? Ready to start?"*
+
+---
+
+## STEP 0 — Prerequisites
+
+Once the user is ready, check the following before touching anything else:
 
 ```bash
 node -v
+```
+
+- Node.js 18+ is required. If the version is too old, ask the user to upgrade before continuing.
+
+```bash
 npx wrangler whoami
 ```
 
+- **If logged in:** show the account name/email and continue.
+- **If not logged in:** explain — *"You need to link the CLI to your Cloudflare account. This opens a browser tab to authorize access. Your credentials are stored locally and are not sent anywhere else."* — then run:
+
+```bash
+npx wrangler login
+```
+
 ---
+
 
 ## STEP 1 — Install dependencies
 
