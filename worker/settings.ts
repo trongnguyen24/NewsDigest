@@ -44,7 +44,7 @@ export const SCRAPER_SETTINGS = {
     richDescriptionMinChars: 1000,
   },
   retry: {
-    failedWindowDays: 3,
+    failedWindowDays: 2,
     maxRetryBatch: 50,
     defaultRateLimitDelaySeconds: 30,
   },
