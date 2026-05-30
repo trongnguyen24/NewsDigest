@@ -1,7 +1,6 @@
 import { Env, Source, ArticleInput } from '../types';
 import { fetchRSS } from './fetchers/rss';
 import { fetchYouTube } from './fetchers/youtube';
-import { fetchReddit } from './fetchers/reddit';
 import { fetchGitHubTrending } from './fetchers/github-trending';
 import { fetchVoz } from './fetchers/voz';
 import { fetchUnknown } from './fetchers/html';
@@ -9,7 +8,8 @@ import { fetchUnknown } from './fetchers/html';
 export async function fetchSource(source: Source, env: Env): Promise<ArticleInput[]> {
   const type = source.type;
   if (type === 'reddit') {
-    return fetchReddit(source);
+    console.log(`⚠️ Reddit server-side fetching disabled — use browser extension`);
+    return [];
   } else if (type === 'youtube') {
     return fetchYouTube(source, env);
   } else if (type === 'rss') {

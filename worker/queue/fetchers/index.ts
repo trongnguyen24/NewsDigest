@@ -1,8 +1,8 @@
 import { Env } from '../../types';
-import { youtubeFetcher } from './youtube.ts';
-import { redditFetcher } from './reddit.ts';
-import { githubFetcher } from './github.ts';
-import { genericFetcher } from './generic.ts';
+import { youtubeFetcher } from './youtube';
+import { redditFetcher } from './reddit';
+import { githubFetcher } from './github';
+import { genericFetcher } from './generic';
 
 /**
  * A self-contained content fetcher for a specific URL type.
@@ -27,7 +27,7 @@ export interface ContentFetcher {
  */
 const FETCHERS: ContentFetcher[] = [
   youtubeFetcher,  // youtube.com, youtu.be
-  redditFetcher,   // reddit.com
+  redditFetcher,   // reddit.com — legacy: extension pushes new content; kept for queue retry of old items
   githubFetcher,   // github.com/<owner>/<repo> (exact repo URLs only)
   genericFetcher,  // HTMLRewriter fallback — always matches
 ];

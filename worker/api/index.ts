@@ -4,6 +4,7 @@ import { Env } from '../types';
 
 import articles from './routes/articles';
 import digest   from './routes/digest';
+import reddit   from './routes/reddit';
 import sources  from './routes/sources';
 import scraper  from './routes/scraper';
 import { requireAdmin } from './utils';
@@ -43,6 +44,7 @@ app.post('/api/auth/verify', async (c) => {
 
 app.route('/api/articles', articles);
 app.route('/api/digest',   digest);
+app.route('/api/reddit',   reddit);
 app.route('/api/sources',  sources);
 app.route('/api',          scraper); // scraper routes keep their full paths (/api/scraper-configs, /api/scraper-profile/test)
 

@@ -1,0 +1,27 @@
+{
+  "name": "newsdigest-reddit-scraper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "@tsconfig/svelte": "^5.0.7",
+    "@types/chrome": "^0.1.36",
+    "@wxt-dev/module-svelte": "^2.0.4",
+    "svelte": "^5.49.2",
+    "svelte-check": "^4.3.6",
+    "typescript": "^5.9.3",
+    "wxt": "^0.20.15"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@wxt-dev/storage": "^1.2.7",
+    "tailwindcss": "^4.1.18"
+  }
+}

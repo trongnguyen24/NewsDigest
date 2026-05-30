@@ -1,7 +1,7 @@
 import { Env } from '../../types';
 import { ConfigError, ContentUnavailableError, NetworkError } from '../../errors';
 import { decodeEntities } from '../../scraper/utils';
-import type { ContentFetcher } from './index.ts';
+import type { ContentFetcher } from './index';
 import { SCRAPER_SETTINGS } from '../../settings';
 
 const MAX_CHARS = SCRAPER_SETTINGS.content.extractMaxChars;

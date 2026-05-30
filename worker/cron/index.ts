@@ -44,9 +44,14 @@ export async function scheduled(event: ScheduledEvent | null, env: Env, ctx: Exe
     return;
   }
 
-  // Tách Reddit ra xử lý riêng tuần tự (tránh rate limit từ Reddit API)
+  // Reddit fetching is handled by the browser extension because Reddit blocks
+  // server-side JSON/API access from worker/bot environments.
   const nonRedditSources = sources.filter(s => s.type !== 'reddit');
-  const redditSources = sources.filter(s => s.type === 'reddit');
+  const redditSources: Source[] = [];
+  const skippedReddit = sources.filter(s => s.type === 'reddit').length;
+  if (skippedReddit > 0) {
+    console.log(`⏭️ Skipping ${skippedReddit} Reddit sources (use browser extension)`);
+  }
 
   console.log(`Fetching ${nonRedditSources.length} non-Reddit + ${redditSources.length} Reddit sources...`);
 

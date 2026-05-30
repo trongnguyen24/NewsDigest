@@ -1,5 +1,5 @@
 import { NetworkError, RateLimitError } from '../../errors';
-import type { ContentFetcher } from './index.ts';
+import type { ContentFetcher } from './index';
 import { SCRAPER_SETTINGS } from '../../settings';
 
 const MAX_CHARS = SCRAPER_SETTINGS.reddit.contentMaxChars;

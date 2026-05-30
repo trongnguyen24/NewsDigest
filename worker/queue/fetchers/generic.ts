@@ -1,6 +1,6 @@
 import { Env } from '../../types';
 import { extractArticleContent } from '../../scraper';
-import type { ContentFetcher } from './index.ts';
+import type { ContentFetcher } from './index';
 
 /**
  * Fallback fetcher — uses HTMLRewriter + AI-learned CSS selector profiles.
