@@ -106,7 +106,18 @@ export async function fetchFeedBuffer(
   url: string,
   signal?: AbortSignal
 ): Promise<{ text: string; contentType: string; isJsonFeed: boolean }> {
-  const response = await fetch(url, {
+  let fetchUrl = url;
+
+  // Google News RSS requires hl/gl/ceid query params, otherwise returns 302 → 503
+  if (url.includes('news.google.com/rss')) {
+    const u = new URL(url);
+    if (!u.searchParams.has('hl')) u.searchParams.set('hl', 'en-US');
+    if (!u.searchParams.has('gl')) u.searchParams.set('gl', 'US');
+    if (!u.searchParams.has('ceid')) u.searchParams.set('ceid', 'US:en');
+    fetchUrl = u.toString();
+  }
+
+  const response = await fetch(fetchUrl, {
     headers: { 'User-Agent': 'NewsDigest/1.0.0' },
     signal,
   });

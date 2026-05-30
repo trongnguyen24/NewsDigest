@@ -122,6 +122,8 @@ function detectSpecialType(url: string): Source['type'] | null {
   if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'youtube';
   if (lower.includes('voz.vn')) return 'voz';
   if (lower.includes('github.com/trending')) return 'github-trending';
+  // Google News RSS feeds: news.google.com/rss/... → always RSS
+  if (lower.includes('news.google.com/rss')) return 'rss';
   return null;
 }
 
