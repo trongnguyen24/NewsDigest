@@ -110,7 +110,6 @@
     await articleCache.invalidateCache(date)
 
     regenerating = true
-    const toastId = toast.loading('Regenerating digest...')
     try {
       const response = await fetch(api('/api/digest/generate'), {
         method: 'POST',
@@ -126,13 +125,13 @@
         throw new Error(errData.error || 'Request failed')
       }
 
-      toast.success('Digest regenerated successfully!', { id: toastId })
+      toast.success('Digest regenerated successfully!')
       
       // Force refresh the articles/digest cache to show the updated digest immediately
       await articleCache.forceRefresh(date)
     } catch (err: any) {
       console.error(err)
-      toast.error(`Error: ${err.message || 'Failed to regenerate digest'}`, { id: toastId })
+      toast.error(`Error: ${err.message || 'Failed to regenerate digest'}`)
     } finally {
       regenerating = false
     }
@@ -162,14 +161,7 @@
     {:else}
       <div class="flex flex-col items-center justify-center py-16 gap-3 text-sm text-text-secondary text-center max-w-xs mx-auto">
         <RefreshCw size={24} class="animate-spin text-text-main" />
-        {#if isWaitingInitial}
-          <span>AI has started generating the digest. Polling will begin in 1 minute...</span>
-        {:else}
-          <div class="flex flex-col gap-1">
-            <span>AI is generating the digest...</span>
-            <span class="text-[0.675rem] opacity-60">Checking server status every 10s (Attempt {pollCount}/24)</span>
-          </div>
-        {/if}
+        <span>AI is generating the digest. Please wait...</span>
       </div>
     {/if}
   {:else}
