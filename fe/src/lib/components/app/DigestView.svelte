@@ -30,15 +30,20 @@
   })
 
   async function handleRegenerate() {
-    if (regenerating || !digest) return
+    const date = digest?.digest_date || articleCache.currentDate
+    if (regenerating || !date) return
     const key = getStoredAdminKey()
     if (!key) {
-      toast.error('Không tìm thấy Admin Key.')
+      toast.error('Admin key not found.')
       return
     }
 
+    // Invalidate local cache in background right away
+    // (so if they close the tab or switch page, next visit is guaranteed to fetch new data)
+    await articleCache.invalidateCache(date)
+
     regenerating = true
-    const toastId = toast.loading('Đang tạo lại bản tin tổng hợp...')
+    const toastId = toast.loading('Regenerating digest...')
     try {
       const response = await fetch(api('/api/digest/generate'), {
         method: 'POST',
@@ -46,21 +51,21 @@
           'Content-Type': 'application/json',
           'X-Admin-Key': key
         },
-        body: JSON.stringify({ date: digest.digest_date })
+        body: JSON.stringify({ date })
       })
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}))
-        throw new Error(errData.error || 'Yêu cầu thất bại')
+        throw new Error(errData.error || 'Request failed')
       }
 
-      toast.success('Đã tạo lại bản tin tổng hợp thành công!', { id: toastId })
+      toast.success('Digest regenerated successfully!', { id: toastId })
       
       // Force refresh the articles/digest cache to show the updated digest immediately
-      await articleCache.forceRefresh(digest.digest_date)
+      await articleCache.forceRefresh(date)
     } catch (err: any) {
       console.error(err)
-      toast.error(`Lỗi: ${err.message || 'Không thể tạo lại bản tin'}`, { id: toastId })
+      toast.error(`Error: ${err.message || 'Failed to regenerate digest'}`, { id: toastId })
     } finally {
       regenerating = false
     }
@@ -80,12 +85,14 @@
   {#if adminKey}
     <div class="mt-8 pt-6 border-t border-dashed border-zinc-200 dark:border-zinc-800 flex justify-center">
       <CusButton
-        class="h-10 px-6 gap-2 text-sm font-semibold text-text-main"
+        class="h-10 px-6 text-sm font-semibold text-text-main"
         onclick={handleRegenerate}
         disabled={regenerating}
       >
-        <RefreshCw size={15} class={regenerating ? 'animate-spin' : ''} />
-        {regenerating ? 'Đang tạo lại...' : 'Tạo lại Digest'}
+        <span class="flex items-center gap-2">
+          <RefreshCw size={15} class={regenerating ? 'animate-spin' : ''} />
+          <span>{regenerating ? 'Regenerating...' : 'Regenerate Digest'}</span>
+        </span>
       </CusButton>
     </div>
   {/if}

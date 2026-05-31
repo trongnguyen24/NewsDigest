@@ -396,7 +396,31 @@ async function forceRefresh(date: string) {
   } else {
     memoryCache.delete(date);
     digestCache.delete(date);
-    await loadDate(date);
+    if (_currentDate === date) {
+      await loadDate(date);
+    } else {
+      await cacheDb.saveDigest(date, null);
+      const idbCached = await cacheDb.getArticles(date);
+      if (idbCached) {
+        await cacheDb.saveArticles(date, {
+          ...idbCached,
+          timestamp: 0,
+        });
+      }
+    }
+  }
+}
+
+async function invalidateCache(date: string) {
+  memoryCache.delete(date);
+  digestCache.delete(date);
+  await cacheDb.saveDigest(date, null);
+  const idbCached = await cacheDb.getArticles(date);
+  if (idbCached) {
+    await cacheDb.saveArticles(date, {
+      ...idbCached,
+      timestamp: 0,
+    });
   }
 }
 
@@ -421,4 +445,5 @@ export const articleCache = {
   get unsummarizedCount() { return _unsummarizedCount; },
   loadDate,
   forceRefresh,
+  invalidateCache,
 };
