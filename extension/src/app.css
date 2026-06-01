@@ -142,7 +142,9 @@
     background-color: var(--color-bg-1);
     color: var(--color-foreground);
     margin: 0;
-    min-width: 400px;
+    width: 400px;
+    height: 580px;
+    overflow: hidden;
     font-family: var(--font-sans);
     transition: background-color 0.3s ease, color 0.3s ease;
   }

@@ -92,7 +92,11 @@ export interface CancelScrapeMessage {
   action: 'cancel-scrape';
 }
 
-export type PopupMessage = StartScrapeMessage | RetryFailedMessage | GetStatusMessage | CancelScrapeMessage;
+export interface ClearLogMessage {
+  action: 'clear-log';
+}
+
+export type PopupMessage = StartScrapeMessage | RetryFailedMessage | GetStatusMessage | CancelScrapeMessage | ClearLogMessage;
 
 export type ContentScriptMessage =
   | { action: 'ping' }

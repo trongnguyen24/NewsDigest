@@ -4,7 +4,7 @@
   import { browser } from 'wxt/browser';
   import { getRedditSources } from '../../lib/api';
   import type { RedditSource, ScrapeStatus } from '../../lib/types';
-  import { Sun, Moon, Settings, RefreshCw, Play, AlertCircle, Terminal, Ban, Link2, ShieldAlert } from 'lucide-svelte';
+  import { Sun, Moon, Settings, RefreshCw, Play, AlertCircle, Terminal, Ban, Link2, ShieldAlert, Trash2 } from 'lucide-svelte';
 
   const DEFAULT_STATUS: ScrapeStatus = {
     running: false,
@@ -90,6 +90,11 @@
 
   async function refreshStatus() {
     const response = await browser.runtime.sendMessage({ action: 'get-status' });
+    if (response?.status) status = response.status;
+  }
+
+  async function clearLog() {
+    const response = await browser.runtime.sendMessage({ action: 'clear-log' });
     if (response?.status) status = response.status;
   }
 
@@ -186,12 +191,27 @@
   });
 </script>
 
-<main class="w-[400px] bg-bg-1 text-text-main flex flex-col min-h-screen">
+<main class="w-[400px] h-[580px] bg-bg-1 text-text-main flex flex-col overflow-hidden">
   <!-- Header -->
-  <header class="border-b border-border px-4 py-4 flex flex-col gap-3 relative">
+  <header class="border-b border-border px-4 py-4 flex flex-col gap-3 relative shrink-0">
     <div class="flex justify-between items-center">
-      <p class="text-[10px] font-sans font-bold uppercase tracking-[0.25em] text-text-secondary opacity-75">NewsDigest</p>
-      
+      <div class="flex items-center gap-2">
+        <h1 class="text-xl font-bold font-serif leading-none tracking-tight text-text-main">Reddit Scraper</h1>
+        <!-- Status Pill -->
+        <span class="rounded-full border border-border bg-bg-btn px-2 py-0.5 text-[10px] font-medium capitalize text-text-main shadow-xs flex items-center gap-1">
+          <span class="size-1.5 rounded-full 
+            {status.phase === 'idle' ? 'bg-zinc-400' : ''}
+            {status.phase === 'listing' ? 'bg-blue-500 animate-pulse' : ''}
+            {status.phase === 'content' ? 'bg-amber-500 animate-pulse' : ''}
+            {status.phase === 'retrying' ? 'bg-purple-500 animate-pulse' : ''}
+            {status.phase === 'done' ? 'bg-green-500' : ''}
+            {status.phase === 'error' ? 'bg-red-500' : ''}
+            {status.phase === 'cancelled' ? 'bg-zinc-500' : ''}"
+          ></span>
+          {status.phase}
+        </span>
+      </div>
+
       <!-- Theme Toggle Button -->
       <button 
         onclick={toggleDarkMode}
@@ -206,55 +226,38 @@
         {/if}
       </button>
     </div>
-    
-    <div class="flex items-end justify-between gap-3">
-      <div>
-        <h1 class="text-xl font-bold font-serif leading-none tracking-tight text-text-main">Reddit Scraper</h1>
-        <p class="text-xs text-text-secondary mt-1">Browser-based old.reddit.com collector</p>
-      </div>
-      
-      <!-- Status Pill -->
-      <span class="rounded-full border border-border bg-bg-btn px-3 py-1 text-xs font-medium capitalize text-text-main shadow-xs flex items-center gap-1.5">
-        <span class="size-2 rounded-full 
-          {status.phase === 'idle' ? 'bg-zinc-400' : ''}
-          {status.phase === 'listing' ? 'bg-blue-500 animate-pulse' : ''}
-          {status.phase === 'content' ? 'bg-amber-500 animate-pulse' : ''}
-          {status.phase === 'retrying' ? 'bg-purple-500 animate-pulse' : ''}
-          {status.phase === 'done' ? 'bg-green-500' : ''}
-          {status.phase === 'error' ? 'bg-red-500' : ''}
-          {status.phase === 'cancelled' ? 'bg-zinc-500' : ''}"
-        ></span>
-        {status.phase}
-      </span>
-    </div>
 
     <!-- Sliding Tab Switcher (Visible only when connected) -->
     {#if isVerified && !isCheckingOnMount}
-      <div class="relative h-8 bg-black/5 dark:bg-white/5 border border-border/60 rounded-full p-0.5 flex items-center w-[184px] mx-auto mt-1.5 overflow-hidden">
+      <div class="relative h-8 bg-black/5 dark:bg-stone-950/60 border border-border/60 dark:border-stone-800/80 rounded-full p-0.5 flex items-center w-[184px] mx-auto mt-1.5 overflow-hidden">
         <!-- Sliding Indicator -->
         <span 
-          class="absolute top-0.5 bottom-0.5 w-[88px] rounded-full border border-white dark:border-white/5 bg-bg-btn shadow-xs transition-transform duration-300 ease-out"
+          class="absolute top-0.5 bottom-0.5 w-[88px] rounded-full border border-white bg-bg-btn dark:bg-stone-800 dark:border-stone-700/50 shadow-xs dark:shadow-md transition-transform duration-300 ease-out"
           style="transform: translateX({activeTabIndex * 90}px);"
         ></span>
         <!-- Tab Buttons -->
         <button 
           onclick={() => activeTab = 'scraper'} 
           onpointerdown={handlePress}
-          class="relative z-10 w-[90px] h-full text-[11px] font-semibold text-center transition-opacity duration-200 cursor-pointer text-text-main" 
-          class:opacity-40={activeTab !== 'scraper'}
+          class="relative z-10 w-[90px] h-full text-[11px] font-semibold text-center transition-all duration-200 cursor-pointer"
+          class:text-text-main={activeTab === 'scraper'}
+          class:text-text-secondary={activeTab !== 'scraper'}
+          class:opacity-50={activeTab !== 'scraper'}
         >Scraper</button>
         <button 
           onclick={() => activeTab = 'settings'} 
           onpointerdown={handlePress}
-          class="relative z-10 w-[90px] h-full text-[11px] font-semibold text-center transition-opacity duration-200 cursor-pointer text-text-main" 
-          class:opacity-40={activeTab !== 'settings'}
+          class="relative z-10 w-[90px] h-full text-[11px] font-semibold text-center transition-all duration-200 cursor-pointer"
+          class:text-text-main={activeTab === 'settings'}
+          class:text-text-secondary={activeTab !== 'settings'}
+          class:opacity-50={activeTab !== 'settings'}
         >Settings</button>
       </div>
     {/if}
   </header>
 
   <!-- Body -->
-  <div class="p-4 space-y-4 flex-1 flex flex-col justify-start">
+  <div class="p-4 space-y-4 flex-1 flex flex-col justify-start overflow-y-auto custom-scrollbar">
     
     <!-- Case 0: Verification Check on Load -->
     {#if isCheckingOnMount}
@@ -280,7 +283,7 @@
 
         <div class="space-y-3 border-t border-border/40 pt-3">
           <div>
-            <label class="block text-[11px] font-medium text-text-secondary mb-1" for="api-url">API URL</label>
+            <label class="block text-[11px] font-medium text-text-secondary mb-1" for="api-url">Worker API URL</label>
             <input
               id="api-url"
               class="h-9 w-full rounded-xl border border-border bg-bg-2 px-3 text-xs text-text-main outline-none focus:border-bw placeholder:text-text-secondary/55 transition-colors"
@@ -350,32 +353,33 @@
             </div>
 
             <div class="mt-4 flex gap-2.5">
-              <button
-                class="h-10 flex-1 rounded-xl bg-bw text-bg-1 px-4 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm transition-opacity hover:opacity-90"
-                disabled={!canStart}
-                onclick={startScrape}
-                onpointerdown={handlePress}
-              >
-                <Play size={11} fill="currentColor" />
-                Scrape All
-              </button>
-              <button
-                class="h-10 flex-1 rounded-xl border border-border bg-bg-btn text-text-main px-4 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer flex items-center justify-center gap-1.5 shadow-xs hover:bg-bg-2/30"
-                disabled={!canStart}
-                onclick={retryFailed}
-                onpointerdown={handlePress}
-              >
-                <RefreshCw size={11} />
-                Retry Failed
-              </button>
               {#if status.running}
                 <button 
-                  class="h-10 rounded-xl border border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900/30 text-red-700 dark:text-red-300 px-3 text-xs font-semibold hover:bg-red-100/50 transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-xs" 
+                  class="h-10 flex-1 rounded-xl border border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900/30 text-red-700 dark:text-red-300 px-4 text-xs font-semibold hover:bg-red-100/50 transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm" 
                   onclick={cancelScrape}
                   onpointerdown={handlePress}
                 >
                   <Ban size={11} />
-                  Cancel
+                  Cancel Scraping
+                </button>
+              {:else}
+                <button
+                  class="h-10 flex-1 rounded-xl bg-bw text-bg-1 px-4 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm transition-opacity hover:opacity-90"
+                  disabled={!canStart}
+                  onclick={startScrape}
+                  onpointerdown={handlePress}
+                >
+                  <Play size={11} fill="currentColor" />
+                  Scrape All
+                </button>
+                <button
+                  class="h-10 flex-1 rounded-xl border border-border bg-bg-btn text-text-main px-4 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer flex items-center justify-center gap-1.5 shadow-xs hover:bg-bg-2/30"
+                  disabled={!canStart}
+                  onclick={retryFailed}
+                  onpointerdown={handlePress}
+                >
+                  <RefreshCw size={11} />
+                  Retry Failed
                 </button>
               {/if}
             </div>
@@ -422,10 +426,10 @@
               </h2>
               <button 
                 class="text-[10px] text-stone-400 hover:text-stone-200 cursor-pointer flex items-center gap-0.5 transition-colors" 
-                onclick={refreshStatus}
+                onclick={clearLog}
               >
-                <RefreshCw size={10} />
-                Sync Log
+                <Trash2 size={10} />
+                Clear Log
               </button>
             </div>
             <div class="max-h-36 space-y-1.5 overflow-auto pr-1 font-mono text-[10px] leading-relaxed scrollbar-thin scrollbar-thumb-stone-700 select-text">
@@ -466,7 +470,7 @@
             
             <div class="space-y-3">
               <div>
-                <label class="block text-[11px] font-medium text-text-secondary mb-1" for="api-url">API URL</label>
+                <label class="block text-[11px] font-medium text-text-secondary mb-1" for="api-url">Worker API URL</label>
                 <input
                   id="api-url"
                   class="h-9 w-full rounded-xl border border-border bg-bg-2 px-3 text-xs text-text-main outline-none focus:border-bw placeholder:text-text-secondary/55 transition-colors"
@@ -516,7 +520,7 @@
               <span class="text-xs text-text-secondary bg-bg-2 px-2 py-0.5 rounded-full border border-border/40 font-medium tabular-nums">{sources.length} enabled</span>
             </div>
             
-            <div class="max-h-[180px] space-y-1.5 overflow-auto pr-1 custom-scrollbar">
+            <div class="space-y-1.5">
               {#if sources.length === 0}
                 <div class="text-center py-6 text-xs text-text-secondary border border-dashed border-border rounded-xl">
                   No enabled Reddit sources found.

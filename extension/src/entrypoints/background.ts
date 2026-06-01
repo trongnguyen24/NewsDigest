@@ -292,6 +292,12 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: PopupMessage) => {
     if (message?.action === 'get-status') return Promise.resolve({ ok: true, status });
 
+    if (message?.action === 'clear-log') {
+      status.log = [];
+      updateStatus({ log: [] });
+      return Promise.resolve({ ok: true, status });
+    }
+
     if (message?.action === 'cancel-scrape') {
       cancelRequested = true;
       log('info', 'Cancellation requested');
